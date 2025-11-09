@@ -1,12 +1,11 @@
 {
   "version": 2,
-  "builds": [
+  "buildCommand": "npm run build:all",
+  "outputDirectory": "public-react",
+  "rewrites": [
     {
-      "src": "client/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
+      "source": "/api/:path*",
+      "destination": "/api/:path*"
     }
   ],
   "routes": [
@@ -15,12 +14,16 @@
       "dest": "/api/$1"
     },
     {
+      "handle": "filesystem"
+    },
+    {
       "src": "/(.*)",
-      "dest": "/client/dist/$1"
+      "dest": "/index.html"
     }
   ],
-  "env": {
-    "STORAGE_TYPE": "vercel-kv",
-    "NODE_ENV": "production"
+  "functions": {
+    "api/**/*.ts": {
+      "runtime": "@vercel/node@3"
+    }
   }
 }
