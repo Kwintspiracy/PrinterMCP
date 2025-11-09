@@ -1,0 +1,66 @@
+{
+  "name": "virtual-printer-mcp",
+  "version": "1.0.0",
+  "description": "A virtual inkjet printer simulator accessible through MCP (Model Context Protocol)",
+  "main": "build/index.js",
+  "bin": {
+    "virtual-printer-mcp": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:web": "tsc src/web-server.ts --outDir build --module commonjs --target es2020 --esModuleInterop --resolveJsonModule --skipLibCheck",
+    "build:mcp-http": "tsc src/mcp-http-server.ts --outDir build --module commonjs --target es2020 --esModuleInterop --resolveJsonModule --skipLibCheck",
+    "build:ui": "vite build",
+    "build:all": "npm run build && npm run build:web && npm run build:mcp-http && npm run build:ui",
+    "start": "node build/index.js",
+    "start:web": "node build/web-server.js",
+    "start:mcp-http": "node build/mcp-http-server.js",
+    "dev": "tsc && node build/index.js",
+    "dev:web": "npm run build:web && node build/web-server.js",
+    "dev:mcp-http": "npm run build:mcp-http && node build/mcp-http-server.js",
+    "dev:ui": "vite",
+    "dev:full": "npm run build:web && concurrently \"npm run dev:ui\" \"npm run start:web\"",
+    "watch": "tsc --watch",
+    "vercel-build": "npm run build:all"
+  },
+  "keywords": [
+    "mcp",
+    "printer",
+    "simulator",
+    "inkjet",
+    "virtual"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "build/",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@chakra-ui/icons": "^2.2.4",
+    "@chakra-ui/react": "^2.10.4",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@modelcontextprotocol/sdk": "^1.21.0",
+    "@vercel/kv": "^3.0.0",
+    "@vercel/node": "^5.5.5",
+    "express": "^5.1.0",
+    "framer-motion": "^11.11.17",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-icons": "^5.5.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.5",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.1.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.12"
+  }
+}

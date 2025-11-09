@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Printer Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🖨️ Virtual Printer Dashboard</h1>
+            <div class="status-badge" id="statusBadge">
+                <span class="status-dot"></span>
+                <span id="statusText">Initializing...</span>
+            </div>
+        </header>
+
+        <div class="dashboard">
+            <!-- Status Panel -->
+            <section class="card status-panel">
+                <h2>Printer Status</h2>
+                <div class="status-info">
+                    <div class="info-item">
+                        <label>Status:</label>
+                        <span id="printerStatus">-</span>
+                    </div>
+                    <div class="info-item">
+                        <label>Model:</label>
+                        <span id="printerModel">-</span>
+                    </div>
+                    <div class="info-item">
+                        <label>Paper Size:</label>
+                        <span id="paperSize">-</span>
+                    </div>
+                </div>
+                <div id="currentJob" class="current-job" style="display: none;">
+                    <h3>Current Job</h3>
+                    <p><strong>Document:</strong> <span id="jobDocument">-</span></p>
+                    <p><strong>Progress:</strong> <span id="jobProgress">-</span></p>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                </div>
+                <div id="errorSection" class="error-section" style="display: none;">
+                    <h3>⚠️ Errors</h3>
+                    <div id="errorList"></div>
+                </div>
+            </section>
+
+            <!-- Ink Levels -->
+            <section class="card ink-panel">
+                <h2>Ink Levels</h2>
+                <div class="ink-levels">
+                    <div class="ink-item">
+                        <div class="ink-label">
+                            <span class="ink-color cyan"></span>
+                            <span>Cyan</span>
+                        </div>
+                        <div class="ink-gauge">
+                            <div class="ink-fill cyan" id="inkCyan"></div>
+                        </div>
+                        <span class="ink-percent" id="inkCyanPercent">-</span>
+                        <div class="ink-controls">
+                            <input type="number" id="inkCyanInput" min="0" max="100" placeholder="%" class="ink-input">
+                            <button class="btn-small" onclick="setInkLevel('cyan')">Set</button>
+                            <button class="btn-small" onclick="refillInk('cyan')">100%</button>
+                        </div>
+                    </div>
+                    <div class="ink-item">
+                        <div class="ink-label">
+                            <span class="ink-color magenta"></span>
+                            <span>Magenta</span>
+                        </div>
+                        <div class="ink-gauge">
+                            <div class="ink-fill magenta" id="inkMagenta"></div>
+                        </div>
+                        <span class="ink-percent" id="inkMagentaPercent">-</span>
+                        <div class="ink-controls">
+                            <input type="number" id="inkMagentaInput" min="0" max="100" placeholder="%" class="ink-input">
+                            <button class="btn-small" onclick="setInkLevel('magenta')">Set</button>
+                            <button class="btn-small" onclick="refillInk('magenta')">100%</button>
+                        </div>
+                    </div>
+                    <div class="ink-item">
+                        <div class="ink-label">
+                            <span class="ink-color yellow"></span>
+                            <span>Yellow</span>
+                        </div>
+                        <div class="ink-gauge">
+                            <div class="ink-fill yellow" id="inkYellow"></div>
+                        </div>
+                        <span class="ink-percent" id="inkYellowPercent">-</span>
+                        <div class="ink-controls">
+                            <input type="number" id="inkYellowInput" min="0" max="100" placeholder="%" class="ink-input">
+                            <button class="btn-small" onclick="setInkLevel('yellow')">Set</button>
+                            <button class="btn-small" onclick="refillInk('yellow')">100%</button>
+                        </div>
+                    </div>
+                    <div class="ink-item">
+                        <div class="ink-label">
+                            <span class="ink-color black"></span>
+                            <span>Black</span>
+                        </div>
+                        <div class="ink-gauge">
+                            <div class="ink-fill black" id="inkBlack"></div>
+                        </div>
+                        <span class="ink-percent" id="inkBlackPercent">-</span>
+                        <div class="ink-controls">
+                            <input type="number" id="inkBlackInput" min="0" max="100" placeholder="%" class="ink-input">
+                            <button class="btn-small" onclick="setInkLevel('black')">Set</button>
+                            <button class="btn-small" onclick="refillInk('black')">100%</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Paper Management -->
+            <section class="card paper-panel">
+                <h2>Paper Tray</h2>
+                <div class="paper-info">
+                    <div class="paper-count">
+                        <span class="paper-icon">📄</span>
+                        <span id="paperCount" class="count">-</span>
+                        <span class="label">sheets</span>
+                    </div>
+                    <div class="paper-capacity">
+                        <span>Capacity: <span id="paperCapacity">-</span></span>
+                    </div>
+                </div>
+                <div class="paper-controls">
+                    <input type="number" id="paperToLoad" min="1" max="500" value="50" placeholder="Sheets">
+                    <select id="paperSizeSelect">
+                        <option value="A4">A4</option>
+                        <option value="A5">A5</option>
+                        <option value="Letter">Letter</option>
+                        <option value="Legal">Legal</option>
+                        <option value="A3">A3</option>
+                        <option value="4x6">4x6</option>
+                    </select>
+                    <button class="btn-primary" onclick="loadPaper()">Load Paper</button>
+                </div>
+            </section>
+
+            <!-- Print Queue -->
+            <section class="card queue-panel">
+                <h2>Print Queue</h2>
+                <div class="queue-info">
+                    <span>Jobs in queue: <strong id="queueCount">0</strong></span>
+                </div>
+                <div id="queueList" class="queue-list">
+                    <p class="empty-message">No jobs in queue</p>
+                </div>
+            </section>
+
+            <!-- Control Panel -->
+            <section class="card control-panel">
+                <h2>Controls</h2>
+                <div class="control-buttons">
+                    <button class="btn-secondary" onclick="pausePrinter()" id="pauseBtn">⏸️ Pause</button>
+                    <button class="btn-secondary" onclick="resumePrinter()" id="resumeBtn">▶️ Resume</button>
+                    <button class="btn-secondary" onclick="powerCycle()">🔄 Power Cycle</button>
+                    <button class="btn-danger" onclick="resetPrinter()">🔴 Reset</button>
+                </div>
+                <h3>Maintenance</h3>
+                <div class="maintenance-buttons">
+                    <button class="btn-small" onclick="cleanHeads()">🧹 Clean Heads</button>
+                    <button class="btn-small" onclick="alignHeads()">📏 Align Heads</button>
+                    <button class="btn-small" onclick="nozzleCheck()">🔍 Nozzle Check</button>
+                    <button class="btn-small" onclick="clearJam()">📄 Clear Jam</button>
+                </div>
+            </section>
+
+            <!-- Test Print -->
+            <section class="card print-panel">
+                <h2>Test Print</h2>
+                <form id="printForm" onsubmit="submitPrint(event)">
+                    <div class="form-group">
+                        <label for="docName">Document Name:</label>
+                        <input type="text" id="docName" value="Test Document" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="pageCount">Pages:</label>
+                        <input type="number" id="pageCount" min="1" max="100" value="5" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="printColor">
+                            <input type="checkbox" id="printColor" checked>
+                            Color Print
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label for="quality">Quality:</label>
+                        <select id="quality">
+                            <option value="draft">Draft</option>
+                            <option value="normal" selected>Normal</option>
+                            <option value="high">High</option>
+                            <option value="photo">Photo</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="printPaperSize">Paper Size:</label>
+                        <select id="printPaperSize">
+                            <option value="A4" selected>A4</option>
+                            <option value="A5">A5</option>
+                            <option value="Letter">Letter</option>
+                            <option value="Legal">Legal</option>
+                            <option value="A3">A3</option>
+                            <option value="4x6">4x6</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn-primary btn-large">🖨️ Print Document</button>
+                </form>
+            </section>
+
+            <!-- Statistics -->
+            <section class="card stats-panel">
+                <h2>Statistics</h2>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Pages</span>
+                        <span class="stat-value" id="totalPages">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Success Rate</span>
+                        <span class="stat-value" id="successRate">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Completed Jobs</span>
+                        <span class="stat-value" id="completedJobs">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Failed Jobs</span>
+                        <span class="stat-value" id="failedJobs">-</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Event Log -->
+            <section class="card log-panel">
+                <h2>Event Log</h2>
+                <div class="log-controls">
+                    <button class="btn-small" onclick="refreshLogs()">Refresh</button>
+                    <button class="btn-small" onclick="clearLogDisplay()">Clear Display</button>
+                </div>
+                <div id="eventLog" class="event-log">
+                    <p class="empty-message">Loading logs...</p>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
