@@ -4,12 +4,35 @@ This guide shows you how to integrate the Virtual Printer MCP Server with n8n fo
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Setup Options](#setup-options)
-3. [HTTP API Endpoints](#http-api-endpoints)
-4. [n8n Workflow Examples](#n8n-workflow-examples)
-5. [Authentication](#authentication)
-6. [Error Handling](#error-handling)
+1. [Quick Start (Vercel)](#quick-start-vercel)
+2. [Overview](#overview)
+3. [Setup Options](#setup-options)
+4. [HTTP API Endpoints](#http-api-endpoints)
+5. [n8n Workflow Examples](#n8n-workflow-examples)
+6. [Authentication](#authentication)
+7. [Error Handling](#error-handling)
+
+---
+
+## Quick Start (Vercel)
+
+🚀 **Ready to use immediately!** Your MCP server is deployed at:
+
+```
+https://virtualprintermcp.vercel.app
+```
+
+### Your First n8n Workflow (5 minutes)
+
+1. **Open n8n** (cloud or self-hosted)
+2. **Create new workflow**
+3. **Add Manual Trigger node**
+4. **Add HTTP Request node** with these settings:
+   - Method: `POST`
+   - URL: `https://virtualprintermcp.vercel.app/api/mcp/tools/get_status`
+   - Headers: `Content-Type: application/json`
+   - Body (JSON): `{"arguments": {}}`
+5. **Execute** → See your printer status! 🎉
 
 ---
 
@@ -27,18 +50,54 @@ The Virtual Printer MCP Server provides an HTTP API that can be accessed from n8
 ```
 n8n Workflow
     ↓ (HTTP Request)
-MCP HTTP Server (localhost:3002 or Vercel)
+MCP HTTP Server (Vercel Serverless)
     ↓
 Virtual Printer
     ↓
-Storage (File or Vercel KV)
+Storage (Vercel KV)
 ```
 
 ---
 
 ## Setup Options
 
-### Option 1: Local n8n + Local MCP Server (Recommended for Development)
+### Option 1: Cloud n8n + Vercel MCP Server (✅ Recommended for Production)
+
+**Your deployment URL:** `https://virtualprintermcp.vercel.app`
+
+**Pros:**
+- ✅ Accessible from anywhere
+- ✅ No infrastructure management
+- ✅ Auto-scaling
+- ✅ Zero downtime deployments
+- ✅ Free tier available
+
+**Setup:**
+
+Your server is already deployed! Just use these base URLs in n8n:
+- **Tools:** `https://virtualprintermcp.vercel.app/api/mcp/tools/{toolName}`
+- **Resources:** `https://virtualprintermcp.vercel.app/api/mcp/resources/{resourceName}`
+
+**Environment Variables (Vercel Dashboard):**
+```
+STORAGE_TYPE=vercel-kv
+NODE_ENV=production
+KV_REST_API_URL=<from Vercel KV>
+KV_REST_API_TOKEN=<from Vercel KV>
+```
+
+### Option 2: Local n8n + Vercel MCP Server
+
+**Pros:**
+- Test workflows locally against production server
+- Good for development/testing
+
+**Setup:**
+
+1. Use Vercel URL in local n8n instance
+2. No additional setup needed!
+
+### Option 3: Local n8n + Local MCP Server (Development Only)
 
 **Pros:**
 - No external dependencies
@@ -55,44 +114,21 @@ Storage (File or Vercel KV)
 
 2. In n8n, use `http://localhost:3002` as the base URL
 
-### Option 2: Cloud n8n + Vercel MCP Server (Recommended for Production)
-
-**Pros:**
-- Accessible from anywhere
-- No local infrastructure needed
-- Auto-scaling
-
-**Setup:**
-
-1. Deploy MCP server to Vercel (see [DEPLOYMENT.md](./DEPLOYMENT.md))
-2. In n8n, use your Vercel URL: `https://your-app.vercel.app`
-
-### Option 3: Local n8n + Vercel MCP Server
-
-**Pros:**
-- Test workflows locally against production server
-- Good for development/testing
-
-**Setup:**
-
-1. Deploy to Vercel
-2. In n8n, use your Vercel URL
-
 ---
 
 ## HTTP API Endpoints
 
 ### Base URLs
 
-- **Local:** `http://localhost:3002`
-- **Vercel:** `https://your-app.vercel.app`
+- **Vercel (Production):** `https://virtualprintermcp.vercel.app`
+- **Local (Development):** `http://localhost:3002`
 
 ### Tool Endpoints
 
 All tool endpoints follow this pattern:
 
 ```
-POST /mcp/tools/{toolName}
+POST /api/mcp/tools/{toolName}
 Content-Type: application/json
 
 {
@@ -102,11 +138,14 @@ Content-Type: application/json
 }
 ```
 
+**Note:** Vercel uses `/api/mcp/` prefix, while local uses `/mcp/` prefix.
+
 ### Available Tools
 
 #### 1. Get Printer Status
 
-**Endpoint:** `POST /mcp/tools/get_status`
+**Endpoint (Vercel):** `POST /api/mcp/tools/get_status`
+**Endpoint (Local):** `POST /mcp/tools/get_status`
 
 **Request:**
 ```json
@@ -204,6 +243,8 @@ GET /health                 # Health check
 
 ## n8n Workflow Examples
 
+**Note:** All examples use Vercel production URLs. Replace with `http://localhost:3002` for local development.
+
 ### Example 1: Print When Email Received
 
 **Trigger:** Email received
@@ -214,7 +255,7 @@ GET /health                 # Health check
    ↓
 2. HTTP Request Node
    - Method: POST
-   - URL: http://localhost:3002/mcp/tools/print_document
+   - URL: https://virtualprintermcp.vercel.app/api/mcp/tools/print_document
    - Body:
      {
        "arguments": {
@@ -238,7 +279,7 @@ GET /health                 # Health check
    ↓
 2. HTTP Request - Get Status
    - Method: POST
-   - URL: http://localhost:3002/mcp/tools/get_status
+   - URL: https://virtualprintermcp.vercel.app/api/mcp/tools/get_status
    - Body: {"arguments": {}}
    ↓
 3. IF Node - Check if any ink < 20%
@@ -257,17 +298,21 @@ GET /health                 # Health check
 1. Schedule Trigger (Cron: 0 0 * * 0)  # Every Sunday midnight
    ↓
 2. HTTP Request - Get Status
+   - URL: https://virtualprintermcp.vercel.app/api/mcp/tools/get_status
+   - Body: {"arguments": {}}
    ↓
 3. IF Node - Check maintenanceNeeded
    ↓
 4. HTTP Request - Clean Print Heads
    - Method: POST
-   - URL: http://localhost:3002/mcp/tools/clean_print_heads
+   - URL: https://virtualprintermcp.vercel.app/api/mcp/tools/clean_print_heads
    - Body: {"arguments": {}}
    ↓
 5. Wait 10 seconds
    ↓
 6. HTTP Request - Align Print Heads
+   - URL: https://virtualprintermcp.vercel.app/api/mcp/tools/align_print_heads
+   - Body: {"arguments": {}}
    ↓
 7. Send completion notification
 ```
@@ -281,7 +326,8 @@ GET /health                 # Health check
 1. Webhook Trigger
    ↓
 2. HTTP Request - Get Queue
-   - URL: http://localhost:3002/mcp/resources/queue
+   - Method: GET
+   - URL: https://virtualprintermcp.vercel.app/api/mcp/resources/queue
    ↓
 3. Function Node - Format data
    ↓
@@ -297,6 +343,8 @@ GET /health                 # Health check
 1. Schedule Trigger (every hour)
    ↓
 2. HTTP Request - Get Status
+   - URL: https://virtualprintermcp.vercel.app/api/mcp/tools/get_status
+   - Body: {"arguments": {}}
    ↓
 3. Function Node - Check each ink color
    ↓
@@ -305,7 +353,7 @@ GET /health                 # Health check
 5. IF - ink < 15%
    ↓
 6. HTTP Request - Refill Ink
-   - URL: http://localhost:3002/mcp/tools/refill_ink_cartridge
+   - URL: https://virtualprintermcp.vercel.app/api/mcp/tools/refill_ink_cartridge
    - Body: {"arguments": {"color": "{{$json.color}}"}}
 ```
 
@@ -313,12 +361,12 @@ GET /health                 # Health check
 
 ## n8n HTTP Request Node Configuration
 
-### Basic Setup
+### Basic Setup (Vercel Production)
 
 1. Add **HTTP Request** node
 2. Configure:
    - **Method:** POST (for tools) or GET (for resources)
-   - **URL:** `http://localhost:3002/mcp/tools/tool_name`
+   - **URL:** `https://virtualprintermcp.vercel.app/api/mcp/tools/tool_name`
    - **Authentication:** None (add if needed)
    - **Headers:**
      ```
@@ -332,6 +380,10 @@ GET /health                 # Health check
        }
      }
      ```
+
+### Basic Setup (Local Development)
+
+Same as above, but use: `http://localhost:3002/mcp/tools/tool_name`
 
 ### Using Expressions
 
@@ -480,24 +532,26 @@ For production deployments, add API key authentication:
 
 ## Testing Your Integration
 
-### 1. Test Tool Discovery
+### Test with Vercel (Production)
+
+**1. Test Tool Discovery**
 
 ```bash
-curl http://localhost:3002/mcp/tools
+curl https://virtualprintermcp.vercel.app/api/mcp/tools
 ```
 
-### 2. Test Get Status
+**2. Test Get Status**
 
 ```bash
-curl -X POST http://localhost:3002/mcp/tools/get_status \
+curl -X POST https://virtualprintermcp.vercel.app/api/mcp/tools/get_status \
   -H "Content-Type: application/json" \
   -d '{"arguments":{}}'
 ```
 
-### 3. Test Print Job
+**3. Test Print Job**
 
 ```bash
-curl -X POST http://localhost:3002/mcp/tools/print_document \
+curl -X POST https://virtualprintermcp.vercel.app/api/mcp/tools/print_document \
   -H "Content-Type: application/json" \
   -d '{
     "arguments": {
@@ -508,6 +562,16 @@ curl -X POST http://localhost:3002/mcp/tools/print_document \
     }
   }'
 ```
+
+**4. Test Resource Access**
+
+```bash
+curl https://virtualprintermcp.vercel.app/api/mcp/resources/state
+```
+
+### Test with Local Server (Development)
+
+Replace `https://virtualprintermcp.vercel.app/api/mcp/` with `http://localhost:3002/mcp/` in all commands above.
 
 ---
 
