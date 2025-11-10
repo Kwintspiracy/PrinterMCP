@@ -73,12 +73,20 @@ export interface IStorageAdapter {
  * Factory function to create appropriate storage adapter based on environment
  */
 export async function createStorageAdapter(): Promise<IStorageAdapter> {
-  const storageType = process.env.STORAGE_TYPE || 'file';
+  // Auto-detect Vercel environment
+  const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
+  const storageType = process.env.STORAGE_TYPE || (isVercel ? 'vercel-kv' : 'file');
   
   switch (storageType) {
     case 'vercel-kv':
-      const { VercelKVStorage } = await import('./vercel-storage.js');
-      return new VercelKVStorage();
+      try {
+        const { VercelKVStorage } = await import('./vercel-storage.js');
+        return new VercelKVStorage();
+      } catch (error) {
+        console.warn('Vercel KV storage failed to initialize, falling back to file storage:', error);
+        const { FileStorage } = await import('./file-storage.js');
+        return new FileStorage();
+      }
     
     case 'file':
     default:

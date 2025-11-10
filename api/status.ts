@@ -35,9 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const printer = await getPrinter();
-    
-    // Give printer a moment to initialize if needed
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await printer.ensureInitialized();
     
     const status = printer.getStatus();
     

@@ -38,56 +38,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const printer = await getPrinter();
     
-    // Check if client wants SSE
-    const acceptHeader = req.headers.accept || '';
-    if (acceptHeader.includes('text/event-stream')) {
-      // Set SSE headers
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      
-      // Send initial status
-      const status = printer.getStatus();
-      res.write(`data: ${JSON.stringify(status)}\n\n`);
-      
-      // Note: Vercel serverless functions timeout after 10s (hobby) or 60s (pro)
-      // For true real-time updates, use polling from the client instead
-      
-      // Send a few updates then close
-      const intervalId = setInterval(() => {
-        try {
-          const status = printer.getStatus();
-          res.write(`data: ${JSON.stringify(status)}\n\n`);
-        } catch (err) {
-          clearInterval(intervalId);
-          res.end();
-        }
-      }, 2000);
-      
-      // Close after 8 seconds to avoid timeout
-      setTimeout(() => {
-        clearInterval(intervalId);
-        res.write('event: close\ndata: Connection closing due to serverless timeout\n\n');
-        res.end();
-      }, 8000);
-      
-    } else {
-      // Return current status as JSON
-      const status = printer.getStatus();
-      return res.status(200).json({
-        ...status,
-        _meta: {
-          note: 'For live updates, use polling to /api/status every 2-3 seconds',
-          sse_available: false,
-          reason: 'Vercel serverless functions have limited SSE support'
-        }
-      });
-    }
-  } catch (error) {
-    console.error('Error in stream endpoint:', error);
-    return res.status(500).json({
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : String(error)
+    // Set up SSE
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
     });
+
+    // Send initial status
+    const status = printer.getStatus();
+    res.write(`data: ${JSON.stringify(status)}\n\n`);
+
+    // Set up interval to send updates
+    const interval = setInterval(() => {
+      try {
+        const status = printer.getStatus();
+        res.write(`data: ${JSON.stringify(status)}\n\n`);
+      } catch (error) {
+        console.error('Error sending status update:', error);
+      }
+    }, 1000);
+
+    // Clean up on connection close
+    req.on('close', () => {
+      clearInterval(interval);
+    });
+  } catch (error) {
+    console.error('Error setting up SSE stream:', error);
+    // Return safe default status for SSE
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+    const defaultStatus = {
+      name: 'Virtual Printer',
+      status: 'offline',
+      inkLevels: { cyan: 0, magenta: 0, yellow: 0, black: 0 },
+      paper: { count: 0, capacity: 100, size: 'A4' },
+      currentJob: null,
+      queue: { length: 0, jobs: [] },
+      errors: [{ type: 'connection', message: 'Printer initialization failed' }],
+      uptimeSeconds: 0,
+      maintenanceNeeded: false
+    };
+    res.write(`data: ${JSON.stringify(defaultStatus)}\n\n`);
   }
 }

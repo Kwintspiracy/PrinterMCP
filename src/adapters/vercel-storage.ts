@@ -38,7 +38,7 @@ export class VercelKVStorage implements IStorageAdapter {
       const state = await kv.get(this.stateKey);
       return state as PrinterState | null;
     } catch (error) {
-      console.error('Error loading state from Vercel KV:', error);
+      console.warn('Vercel KV not available, using default state:', error);
       return null;
     }
   }
@@ -48,8 +48,8 @@ export class VercelKVStorage implements IStorageAdapter {
       const kv = await this.getKV();
       await kv.set(this.stateKey, state);
     } catch (error) {
-      console.error('Error saving state to Vercel KV:', error);
-      throw error;
+      console.warn('Vercel KV not available, state will not persist:', error);
+      // Don't throw - allow operation to continue without persistence
     }
   }
 
@@ -69,8 +69,8 @@ export class VercelKVStorage implements IStorageAdapter {
       const kv = await this.getKV();
       await kv.del(this.stateKey);
     } catch (error) {
-      console.error('Error clearing state from Vercel KV:', error);
-      throw error;
+      console.warn('Vercel KV not available, nothing to clear:', error);
+      // Don't throw - operation is essentially successful (no state to clear)
     }
   }
 

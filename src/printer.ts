@@ -21,10 +21,11 @@ export class VirtualPrinter {
   private state: any;
   private stateManager: StateManager;
   private processingInterval: NodeJS.Timeout | null = null;
+  private initPromise: Promise<void>;
 
   constructor(stateManager: StateManager) {
     this.stateManager = stateManager;
-    this.initialize();
+    this.initPromise = this.initialize();
   }
 
   private async initialize() {
@@ -45,6 +46,10 @@ export class VirtualPrinter {
     
     // Start job processing
     this.startProcessing();
+  }
+
+  async ensureInitialized() {
+    await this.initPromise;
   }
 
   private startProcessing() {

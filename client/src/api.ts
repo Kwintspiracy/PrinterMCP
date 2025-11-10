@@ -67,18 +67,89 @@ export interface LogEntry {
 
 export const api = {
   async getStatus(): Promise<PrinterStatus> {
-    const response = await fetch(`${API_BASE}/status`);
-    return response.json();
+    try {
+      const response = await fetch(`${API_BASE}/status`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      // Ensure required fields exist
+      return {
+        name: data.name || 'Virtual Printer',
+        status: data.status || 'offline',
+        inkLevels: data.inkLevels || { cyan: 0, magenta: 0, yellow: 0, black: 0 },
+        paper: data.paper || { count: 0, capacity: 100, size: 'A4' },
+        currentJob: data.currentJob || null,
+        queue: data.queue || { length: 0, jobs: [] },
+        errors: data.errors || [],
+        uptimeSeconds: data.uptimeSeconds || 0,
+        maintenanceNeeded: data.maintenanceNeeded || false,
+      };
+    } catch (error) {
+      console.error('Failed to get status:', error);
+      // Return safe default state
+      return {
+        name: 'Virtual Printer',
+        status: 'offline',
+        inkLevels: { cyan: 0, magenta: 0, yellow: 0, black: 0 },
+        paper: { count: 0, capacity: 100, size: 'A4' },
+        currentJob: null,
+        queue: { length: 0, jobs: [] },
+        errors: [{ type: 'connection', message: 'Unable to connect to printer' }],
+        uptimeSeconds: 0,
+        maintenanceNeeded: false,
+      };
+    }
   },
 
   async getStatistics(): Promise<Statistics> {
-    const response = await fetch(`${API_BASE}/statistics`);
-    return response.json();
+    try {
+      const response = await fetch(`${API_BASE}/statistics`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      return {
+        totalPagesPrinted: data.totalPagesPrinted || 0,
+        totalJobs: data.totalJobs || 0,
+        successfulJobs: data.successfulJobs || 0,
+        failedJobs: data.failedJobs || 0,
+        completedJobs: data.completedJobs || 0,
+        totalInkUsed: data.totalInkUsed || { cyan: 0, magenta: 0, yellow: 0, black: 0 },
+        maintenanceCycles: data.maintenanceCycles || 0,
+        totalErrors: data.totalErrors || 0,
+        averageJobSize: data.averageJobSize || 0,
+        successRate: data.successRate || 0,
+      };
+    } catch (error) {
+      console.error('Failed to get statistics:', error);
+      return {
+        totalPagesPrinted: 0,
+        totalJobs: 0,
+        successfulJobs: 0,
+        failedJobs: 0,
+        completedJobs: 0,
+        totalInkUsed: { cyan: 0, magenta: 0, yellow: 0, black: 0 },
+        maintenanceCycles: 0,
+        totalErrors: 0,
+        averageJobSize: 0,
+        successRate: 0,
+      };
+    }
   },
 
   async getLogs(limit: number = 50): Promise<{ logs: LogEntry[] }> {
-    const response = await fetch(`${API_BASE}/logs?limit=${limit}`);
-    return response.json();
+    try {
+      const response = await fetch(`${API_BASE}/logs?limit=${limit}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      return { logs: data.logs || [] };
+    } catch (error) {
+      console.error('Failed to get logs:', error);
+      return { logs: [] };
+    }
   },
 
   async printDocument(data: {

@@ -35,13 +35,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const printer = await getPrinter();
     const statistics = printer.getStatistics();
-    
     return res.status(200).json(statistics);
   } catch (error) {
-    console.error('Error getting statistics:', error);
-    return res.status(500).json({
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : String(error)
+    console.error('Error getting printer statistics:', error);
+    // Return safe default statistics instead of 500 error
+    return res.status(200).json({
+      totalPagesPrinted: 0,
+      totalJobs: 0,
+      successfulJobs: 0,
+      failedJobs: 0,
+      completedJobs: 0,
+      totalInkUsed: { cyan: 0, magenta: 0, yellow: 0, black: 0 },
+      maintenanceCycles: 0,
+      totalErrors: 0,
+      averageJobSize: 0,
+      successRate: 0
     });
   }
 }
