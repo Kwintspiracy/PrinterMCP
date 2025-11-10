@@ -19,7 +19,7 @@ This guide shows you how to integrate the Virtual Printer MCP Server with n8n fo
 🚀 **Ready to use immediately!** Your MCP server is deployed at:
 
 ```
-https://virtualprintermcp.vercel.app
+https://virtualprintermcp.vercel.appW
 ```
 
 ### Your First n8n Workflow (5 minutes)
@@ -580,3 +580,104 @@ Replace `https://virtualprintermcp.vercel.app/api/mcp/` with `http://localhost:3
 - [Deployment Guide](./DEPLOYMENT.md) - Deploy to Vercel
 - [README](./README.md) - Full project documentation
 - [n8n Documentation](https://docs.n8n.io/) - Learn more about n8n
+
+
+# Exemples
+
+✅ __n8n Integration Guide Updated and Synced!__
+
+## 📝 What Was Updated
+
+Successfully updated `N8N_INTEGRATION.md` with complete Vercel deployment information and pushed to GitHub.
+
+### __Key Changes:__
+
+1. __Added Quick Start Section__
+
+   - 5-minute guide to first n8n workflow
+   - Uses production Vercel URL: `https://virtualprintermcp.vercel.app`
+   - Step-by-step instructions
+
+2. __Updated All URLs__
+
+   - ✅ API endpoints: `/api/mcp/tools/` and `/api/mcp/resources/`
+   - ✅ Workflow examples: All use Vercel production URLs
+   - ✅ Testing commands: Vercel curl examples added
+   - ✅ Configuration samples: Vercel-first approach
+
+3. __Reorganized Setup Options__
+
+   - __Option 1:__ Cloud n8n + Vercel (✅ Recommended)
+   - __Option 2:__ Local n8n + Vercel
+   - __Option 3:__ Local only (Development)
+
+4. __Enhanced Examples__
+
+   - All 5 workflow examples updated
+   - Production-ready configurations
+   - Vercel URL in every HTTP Request node
+
+---
+
+## 🎯 __Your n8n Integration is Ready!__
+
+### __Quick Test in n8n:__
+
+1. __Open n8n__ (cloud.n8n.io or self-hosted)
+
+2. __Create workflow__ with Manual Trigger
+
+3. __Add HTTP Request__ node:
+
+   ```javascript
+   Method: POST
+   URL: https://virtualprintermcp.vercel.app/api/mcp/tools/get_status
+   Headers: Content-Type: application/json
+   Body: {"arguments": {}}
+   ```
+
+4. __Execute__ → See printer status!
+
+---
+
+## 📋 __Available Endpoints__
+
+### __Tools (POST requests):__
+
+- `https://virtualprintermcp.vercel.app/api/mcp/tools/get_status`
+- `https://virtualprintermcp.vercel.app/api/mcp/tools/print_document`
+- `https://virtualprintermcp.vercel.app/api/mcp/tools/refill_ink_cartridge`
+- `https://virtualprintermcp.vercel.app/api/mcp/tools/pause_printer`
+- `https://virtualprintermcp.vercel.app/api/mcp/tools/resume_printer`
+- ...and 10+ more (see full doc)
+
+### __Resources (GET requests):__
+
+- `https://virtualprintermcp.vercel.app/api/mcp/resources/state`
+- `https://virtualprintermcp.vercel.app/api/mcp/resources/queue`
+- `https://virtualprintermcp.vercel.app/api/mcp/resources/logs`
+- `https://virtualprintermcp.vercel.app/api/mcp/resources/statistics`
+- `https://virtualprintermcp.vercel.app/api/mcp/resources/capabilities`
+
+### __Discovery:__
+
+- `https://virtualprintermcp.vercel.app/api/mcp/tools` (list all)
+- `https://virtualprintermcp.vercel.app/api/mcp/resources` (list all)
+
+---
+
+## 📚 __Documentation Locations__
+
+1. __N8N_INTEGRATION.md__ - Complete n8n guide (just updated!)
+2. __VERCEL_DEPLOYMENT_GUIDE.md__ - Vercel setup
+3. __DEPLOYMENT.md__ - General deployment
+4. __README.md__ - Project overview
+
+---
+
+## 🚀 __Everything is Live and Synced__
+
+- ✅ __GitHub main branch__ updated with latest docs
+- ✅ __Vercel__ will auto-deploy (already has MCP endpoints)
+- ✅ __n8n-ready__ with production URLs
+- ✅ __5 example workflows__ ready to use
