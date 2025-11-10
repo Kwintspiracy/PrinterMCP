@@ -35,8 +35,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const printer = await getPrinter();
+    
+    // Give printer a moment to initialize if needed
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     const status = printer.getStatus();
-    return res.status(200).json(status);
+    
+    // Ensure the response has the correct structure
+    const safeStatus = {
+      name: status.name || 'Virtual Inkjet Pro',
+      status: status.status || 'initializing',
+      inkLevels: status.inkLevels || { cyan: 0, magenta: 0, yellow: 0, black: 0 },
+      paper: status.paper || { count: 0, capacity: 100, size: 'A4' },
+      currentJob: status.currentJob || null,
+      queue: {
+        length: status.queue?.length || 0,
+        jobs: status.queue?.jobs || []
+      },
+      errors: status.errors || [],
+      uptimeSeconds: status.uptimeSeconds || 0,
+      maintenanceNeeded: status.maintenanceNeeded || false
+    };
+    
+    return res.status(200).json(safeStatus);
   } catch (error) {
     console.error('Error getting printer status:', error);
     return res.status(500).json({
