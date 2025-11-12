@@ -36,10 +36,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    console.log('[StatusAPI] Fetching printer status...');
     const printer = await getPrinter();
     await printer.ensureInitialized();
     
     const status = printer.getStatus();
+    console.log('[StatusAPI] Status retrieved:', status.status);
     
     // Ensure the response has the correct structure with proper fallbacks
     const safeStatus = {
@@ -56,6 +58,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       uptimeSeconds: status.uptimeSeconds || 0,
       maintenanceNeeded: status.maintenanceNeeded || false
     };
+    
+    // Add debug info if requested
+    if (req.query.debug === 'true') {
+      (safeStatus as any).debug = {
+        isServerless: !!(process.env.VERCEL || process.env.STORAGE_TYPE === 'vercel-kv'),
+        storageType: process.env.STORAGE_TYPE || 'file',
+        hasVercelEnv: !!process.env.VERCEL,
+        timestamp: new Date().toISOString()
+      };
+    }
     
     return res.status(200).json(safeStatus);
   } catch (error) {

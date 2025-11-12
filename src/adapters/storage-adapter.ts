@@ -77,7 +77,19 @@ export async function createStorageAdapter(): Promise<IStorageAdapter> {
   const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
   const storageType = process.env.STORAGE_TYPE || (isVercel ? 'vercel-kv' : 'file');
   
+  console.log(`Storage adapter: type=${storageType}, isVercel=${isVercel}`);
+  
   switch (storageType) {
+    case 'supabase':
+      try {
+        const { SupabaseStorage } = await import('./supabase-storage.js');
+        return new SupabaseStorage();
+      } catch (error) {
+        console.warn('Supabase storage failed to initialize, falling back to file storage:', error);
+        const { FileStorage } = await import('./file-storage.js');
+        return new FileStorage();
+      }
+    
     case 'vercel-kv':
       try {
         const { VercelKVStorage } = await import('./vercel-storage.js');
