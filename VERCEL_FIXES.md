@@ -5,9 +5,11 @@
 ### 1. Printer Stays "offline" on Vercel
 **Root Cause**: The printer initialization uses `setTimeout` to transition from 'offline' → 'warming_up' → 'ready'. In Vercel's serverless environment, each API request creates a new short-lived function instance. The setTimeout timer (12 seconds) never completes because the function terminates before the timer fires, leaving the printer stuck in 'offline' or 'warming_up' state.
 
+Additionally, stale state from previous deployments could leave the printer in any non-ready status that wouldn't be corrected.
+
 **Solution**:
 - Added serverless environment detection (`process.env.VERCEL` or `STORAGE_TYPE=vercel-kv`)
-- In serverless mode: printer initializes directly to 'ready' state (no delays)
+- In serverless mode: printer initializes to 'ready' state for ANY non-ready/non-printing status (handles stale states)
 - In local mode: maintains original warming up simulation with setTimeout
 - Disabled interval-based queue processing in serverless (not compatible with ephemeral functions)
 - Fixed `powerCycle()` method to work synchronously in serverless mode

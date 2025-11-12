@@ -34,15 +34,17 @@ export class VirtualPrinter {
   private async initialize() {
     this.state = await this.stateManager.loadState();
     
-    // In serverless environments, skip warming up and go directly to ready
-    if (this.state.status === 'offline') {
-      if (this.isServerless) {
-        // Serverless: immediate initialization
+    if (this.isServerless) {
+      // Serverless: Always ensure ready state regardless of current status
+      // This handles stale states from previous deployments
+      if (this.state.status !== 'ready' && this.state.status !== 'printing') {
         this.state.status = 'ready';
         this.log('info', 'Printer ready (serverless mode)');
         await this.saveState();
-      } else {
-        // Local: simulate warming up
+      }
+    } else {
+      // Local: simulate warming up if offline
+      if (this.state.status === 'offline') {
         this.log('info', 'Printer warming up...');
         this.state.status = 'warming_up';
         await this.saveState();
@@ -53,10 +55,8 @@ export class VirtualPrinter {
           await this.saveState();
         }, 12000);
       }
-    }
-    
-    // Only start interval processing in local/persistent environments
-    if (!this.isServerless) {
+      
+      // Start interval processing in local/persistent environments
       this.startProcessing();
     }
   }
