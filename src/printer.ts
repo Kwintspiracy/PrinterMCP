@@ -22,30 +22,43 @@ export class VirtualPrinter {
   private stateManager: StateManager;
   private processingInterval: NodeJS.Timeout | null = null;
   private initPromise: Promise<void>;
+  private isServerless: boolean;
 
   constructor(stateManager: StateManager) {
     this.stateManager = stateManager;
+    // Detect serverless environment (Vercel)
+    this.isServerless = !!(process.env.VERCEL || process.env.STORAGE_TYPE === 'vercel-kv');
     this.initPromise = this.initialize();
   }
 
   private async initialize() {
     this.state = await this.stateManager.loadState();
     
-    // Start warming up if offline
+    // In serverless environments, skip warming up and go directly to ready
     if (this.state.status === 'offline') {
-      this.log('info', 'Printer warming up...');
-      this.state.status = 'warming_up';
-      await this.saveState();
-      
-      setTimeout(async () => {
+      if (this.isServerless) {
+        // Serverless: immediate initialization
         this.state.status = 'ready';
-        this.log('info', 'Printer ready');
+        this.log('info', 'Printer ready (serverless mode)');
         await this.saveState();
-      }, 12000);
+      } else {
+        // Local: simulate warming up
+        this.log('info', 'Printer warming up...');
+        this.state.status = 'warming_up';
+        await this.saveState();
+        
+        setTimeout(async () => {
+          this.state.status = 'ready';
+          this.log('info', 'Printer ready');
+          await this.saveState();
+        }, 12000);
+      }
     }
     
-    // Start job processing
-    this.startProcessing();
+    // Only start interval processing in local/persistent environments
+    if (!this.isServerless) {
+      this.startProcessing();
+    }
   }
 
   async ensureInitialized() {
@@ -394,22 +407,32 @@ export class VirtualPrinter {
   }
 
   powerCycle(): string {
-    this.state.status = 'offline';
-    this.log('info', 'Power cycling printer');
-    this.saveState();
-    
-    setTimeout(async () => {
-      this.state.status = 'warming_up';
-      await this.saveState();
+    if (this.isServerless) {
+      // Serverless: immediate power cycle
+      this.state.status = 'ready';
+      this.state.errors = [];
+      this.log('info', 'Printer power cycled (serverless mode)');
+      this.saveState();
+      return 'Printer power cycled';
+    } else {
+      // Local: simulate power cycle with delays
+      this.state.status = 'offline';
+      this.log('info', 'Power cycling printer');
+      this.saveState();
+      
       setTimeout(async () => {
-        this.state.status = 'ready';
-        this.state.errors = [];
-        this.log('info', 'Printer restarted');
+        this.state.status = 'warming_up';
         await this.saveState();
-      }, 12000);
-    }, 3000);
-    
-    return 'Power cycling printer...';
+        setTimeout(async () => {
+          this.state.status = 'ready';
+          this.state.errors = [];
+          this.log('info', 'Printer restarted');
+          await this.saveState();
+        }, 12000);
+      }, 3000);
+      
+      return 'Power cycling printer...';
+    }
   }
 
   async reset(): Promise<string> {

@@ -2,7 +2,17 @@
 
 ## Issues Fixed
 
-### 1. "Cannot read properties of undefined (reading 'inkLevels')"
+### 1. Printer Stays "offline" on Vercel
+**Root Cause**: The printer initialization uses `setTimeout` to transition from 'offline' → 'warming_up' → 'ready'. In Vercel's serverless environment, each API request creates a new short-lived function instance. The setTimeout timer (12 seconds) never completes because the function terminates before the timer fires, leaving the printer stuck in 'offline' or 'warming_up' state.
+
+**Solution**:
+- Added serverless environment detection (`process.env.VERCEL` or `STORAGE_TYPE=vercel-kv`)
+- In serverless mode: printer initializes directly to 'ready' state (no delays)
+- In local mode: maintains original warming up simulation with setTimeout
+- Disabled interval-based queue processing in serverless (not compatible with ephemeral functions)
+- Fixed `powerCycle()` method to work synchronously in serverless mode
+
+### 2. "Cannot read properties of undefined (reading 'inkLevels')"
 **Root Cause**: Race conditions in Vercel's serverless environment where multiple API calls could create separate printer instances that weren't synchronized.
 
 **Solution**: 
@@ -10,7 +20,7 @@
 - Ensures fresh state is loaded from Vercel KV storage on every request
 - Prevents stale cached data from causing undefined property errors
 
-### 2. Ink Level Always Showing 100%
+### 3. Ink Level Always Showing 100%
 **Root Cause**: The `/api/set-ink/[color].ts` endpoint was only calling `printer.refillInk()` which always sets ink to 100%, regardless of the desired level.
 
 **Solution**:
@@ -23,30 +33,37 @@
 
 ### Modified Files
 
-1. **`api/set-ink/[color].ts`**
+1. **`src/printer.ts`** (CRITICAL FIX)
+   - Added `isServerless` property to detect Vercel environment
+   - Modified `initialize()` to skip setTimeout delays in serverless mode
+   - Modified `powerCycle()` to work synchronously in serverless mode
+   - Disabled `startProcessing()` interval in serverless (queue processing not supported)
+   - Printer now initializes directly to 'ready' state on Vercel
+
+2. **`api/set-ink/[color].ts`**
    - Removed printer instance dependency
    - Added direct StateManager manipulation
    - Added proper validation for `level` parameter
    - Ensures `inkLevels` object exists before updating
 
-2. **`api/status.ts`**
+3. **`api/status.ts`**
    - Added `await printer.reloadState()` before getting status
    - Enhanced error handling with fallback default status
 
-3. **`api/control.ts`**
+4. **`api/control.ts`**
    - Added `await printer.reloadState()` before control operations
 
-4. **`api/print.ts`**
+5. **`api/print.ts`**
    - Added `await printer.reloadState()` before print operations
 
-5. **`api/stream.ts`**
+6. **`api/stream.ts`**
    - Added `await printer.reloadState()` in initial load
    - Added `await printer.reloadState()` in SSE update interval for real-time accuracy
 
-6. **`api/statistics.ts`**
+7. **`api/statistics.ts`**
    - Added `await printer.reloadState()` before getting statistics
 
-7. **`api/logs.ts`**
+8. **`api/logs.ts`**
    - Added `await printer.reloadState()` before getting logs
 
 ## How It Works
