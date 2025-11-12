@@ -28,36 +28,68 @@ export class VirtualPrinter {
     this.stateManager = stateManager;
     // Detect serverless environment (Vercel)
     this.isServerless = !!(process.env.VERCEL || process.env.STORAGE_TYPE === 'vercel-kv');
+    
+    // Log environment detection
+    console.log('[PrinterInit] Environment Detection:', {
+      VERCEL: process.env.VERCEL,
+      STORAGE_TYPE: process.env.STORAGE_TYPE,
+      isServerless: this.isServerless,
+      NODE_ENV: process.env.NODE_ENV
+    });
+    
     this.initPromise = this.initialize();
   }
 
   private async initialize() {
-    this.state = await this.stateManager.loadState();
+    console.log('[PrinterInit] Starting initialization...');
     
-    if (this.isServerless) {
-      // Serverless: Always ensure ready state regardless of current status
-      // This handles stale states from previous deployments
-      if (this.state.status !== 'ready' && this.state.status !== 'printing') {
-        this.state.status = 'ready';
-        this.log('info', 'Printer ready (serverless mode)');
-        await this.saveState();
-      }
-    } else {
-      // Local: simulate warming up if offline
-      if (this.state.status === 'offline') {
-        this.log('info', 'Printer warming up...');
-        this.state.status = 'warming_up';
-        await this.saveState();
-        
-        setTimeout(async () => {
+    try {
+      this.state = await this.stateManager.loadState();
+      console.log('[PrinterInit] State loaded:', {
+        status: this.state.status,
+        name: this.state.name,
+        hasInkLevels: !!this.state.inkLevels,
+        paperCount: this.state.paperCount
+      });
+      
+      if (this.isServerless) {
+        console.log('[PrinterInit] Serverless mode detected');
+        // Serverless: Always ensure ready state regardless of current status
+        // This handles stale states from previous deployments
+        if (this.state.status !== 'ready' && this.state.status !== 'printing') {
+          console.log(`[PrinterInit] Converting status from '${this.state.status}' to 'ready'`);
           this.state.status = 'ready';
-          this.log('info', 'Printer ready');
+          this.log('info', 'Printer ready (serverless mode)');
           await this.saveState();
-        }, 12000);
+          console.log('[PrinterInit] Status saved successfully');
+        } else {
+          console.log(`[PrinterInit] Status already '${this.state.status}', no change needed`);
+        }
+      } else {
+        console.log('[PrinterInit] Local mode detected');
+        // Local: simulate warming up if offline
+        if (this.state.status === 'offline') {
+          console.log('[PrinterInit] Starting warm-up sequence');
+          this.log('info', 'Printer warming up...');
+          this.state.status = 'warming_up';
+          await this.saveState();
+          
+          setTimeout(async () => {
+            this.state.status = 'ready';
+            this.log('info', 'Printer ready');
+            await this.saveState();
+            console.log('[PrinterInit] Warm-up complete');
+          }, 12000);
+        }
+        
+        // Start interval processing in local/persistent environments
+        this.startProcessing();
       }
       
-      // Start interval processing in local/persistent environments
-      this.startProcessing();
+      console.log('[PrinterInit] Initialization complete');
+    } catch (error) {
+      console.error('[PrinterInit] Initialization failed:', error);
+      throw error;
     }
   }
 
