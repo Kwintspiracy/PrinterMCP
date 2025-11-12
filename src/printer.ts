@@ -60,8 +60,14 @@ export class VirtualPrinter {
           console.log(`[PrinterInit] Converting status from '${this.state.status}' to 'ready'`);
           this.state.status = 'ready';
           this.log('info', 'Printer ready (serverless mode)');
-          await this.saveState();
-          console.log('[PrinterInit] Status saved successfully');
+          
+          try {
+            await this.saveState();
+            console.log('[PrinterInit] Status saved successfully');
+          } catch (saveError) {
+            console.warn('[PrinterInit] Failed to save state, but continuing with in-memory state:', saveError);
+            // Continue anyway - printer will work in memory-only mode
+          }
         } else {
           console.log(`[PrinterInit] Status already '${this.state.status}', no change needed`);
         }
@@ -86,10 +92,14 @@ export class VirtualPrinter {
         this.startProcessing();
       }
       
-      console.log('[PrinterInit] Initialization complete');
+      console.log('[PrinterInit] Initialization complete, final status:', this.state.status);
     } catch (error) {
       console.error('[PrinterInit] Initialization failed:', error);
-      throw error;
+      // If initialization fails completely, set a default working state
+      console.log('[PrinterInit] Creating default state due to initialization failure');
+      this.state = await this.stateManager.getDefaultState();
+      this.state.status = 'ready';
+      console.log('[PrinterInit] Using fallback default state with ready status');
     }
   }
 
@@ -246,6 +256,13 @@ export class VirtualPrinter {
    */
   async reloadState(): Promise<void> {
     this.state = await this.stateManager.loadState();
+    
+    // In serverless mode, always force status to ready after reloading
+    // This handles cases where storage fails or contains stale state
+    if (this.isServerless && this.state.status !== 'ready' && this.state.status !== 'printing') {
+      console.log(`[PrinterReload] Forcing status from '${this.state.status}' to 'ready' (serverless mode)`);
+      this.state.status = 'ready';
+    }
   }
 
   // Public API Methods
