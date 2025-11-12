@@ -18,9 +18,7 @@ export default function StatusPanel({ status }: StatusPanelProps) {
   }
 
   const currentJob = status.currentJob;
-  const progress = currentJob 
-    ? (parseInt(currentJob.progress.split('/')[0]) / parseInt(currentJob.progress.split('/')[1])) * 100 
-    : 0;
+  const progress = currentJob?.progress ? parseFloat(String(currentJob.progress)) : 0;
 
   return (
     <Box bg="white" p={6} borderRadius="lg" shadow="sm">
@@ -31,17 +29,7 @@ export default function StatusPanel({ status }: StatusPanelProps) {
       <VStack align="stretch" spacing={3}>
         <HStack justify="space-between">
           <Text fontWeight="semibold">Status:</Text>
-          <Text>{status.status}</Text>
-        </HStack>
-        
-        <HStack justify="space-between">
-          <Text fontWeight="semibold">Model:</Text>
-          <Text>{status.name}</Text>
-        </HStack>
-        
-        <HStack justify="space-between">
-          <Text fontWeight="semibold">Paper Size:</Text>
-          <Text>{status.paper.size}</Text>
+          <Text textTransform="capitalize">{status.status.replace('_', ' ')}</Text>
         </HStack>
       </VStack>
 

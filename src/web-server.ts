@@ -185,7 +185,7 @@ app.post('/api/refill/:color', (req, res) => {
 });
 
 // Set ink level to specific percentage
-app.post('/api/set-ink/:color', (req, res) => {
+app.post('/api/set-ink/:color', async (req, res) => {
   try {
     const color = req.params.color as 'cyan' | 'magenta' | 'yellow' | 'black';
     const { level } = req.body;
@@ -198,12 +198,12 @@ app.post('/api/set-ink/:color', (req, res) => {
     }
 
     // Load current state, modify it, and save it back
-    const state = stateManager.loadState();
+    const state = await stateManager.loadState();
     state.inkLevels[color] = level;
-    stateManager.saveState(state);
+    await stateManager.saveState(state);
     
-    // Force printer to reload state to reflect changes in SSE stream
-    (printer as any).state = state;
+    // Reload printer state to reflect changes immediately
+    await printer.reloadState();
     
     // Log the change
     console.log(`Set ${color} ink to ${level}%`);

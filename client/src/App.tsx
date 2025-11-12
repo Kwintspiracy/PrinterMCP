@@ -165,11 +165,19 @@ function App() {
           />
           <PrintForm
             onSubmit={async (data) => {
-              const result = await api.printDocument(data);
-              if (result.success) {
-                showToast(`Print job submitted! Job ID: ${result.jobId}`, 'success');
-              } else {
-                showToast(`Error: ${result.error}`, 'error');
+              try {
+                const result = await api.printDocument(data);
+                if (result.success) {
+                  showToast(`Print job submitted! Job ID: ${result.jobId}`, 'success');
+                } else {
+                  showToast(`Error: ${result.error}`, 'error');
+                }
+              } catch (error) {
+                console.error('Print error:', error);
+                showToast(
+                  `Failed to submit print job: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                  'error'
+                );
               }
             }}
           />
