@@ -46,6 +46,7 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@modelcontextprotocol/sdk": "^1.21.0",
+    "@supabase/supabase-js": "^2.81.1",
     "@vercel/kv": "^3.0.0",
     "@vercel/node": "^2.3.0",
     "express": "^5.1.0",
