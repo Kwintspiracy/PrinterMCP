@@ -4,18 +4,7 @@
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { VirtualPrinter } from '../../build/printer.js';
 import { StateManager } from '../../build/state-manager.js';
-
-let printerInstance: VirtualPrinter | null = null;
-
-async function getPrinter() {
-  if (!printerInstance) {
-    const stateManager = new StateManager();
-    printerInstance = new VirtualPrinter(stateManager);
-  }
-  return printerInstance;
-}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Set CORS headers
@@ -47,16 +36,60 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const printer = await getPrinter();
-    const message = printer.refillInk(color as 'cyan' | 'magenta' | 'yellow' | 'black');
+    const { level } = req.body;
     
+    // Validate level parameter
+    if (level === undefined || level === null) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'level parameter is required in request body' 
+      });
+    }
+
+    const levelNum = Number(level);
+    if (isNaN(levelNum) || levelNum < 0 || levelNum > 100) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'level must be a number between 0 and 100' 
+      });
+    }
+
+    // Directly manipulate state to avoid race conditions
+    const stateManager = new StateManager();
+    const state = await stateManager.loadState();
+    
+    // Ensure inkLevels exists
+    if (!state.inkLevels) {
+      state.inkLevels = {
+        cyan: 100,
+        magenta: 100,
+        yellow: 100,
+        black: 100
+      };
+    }
+    
+    // Update the specific color
+    state.inkLevels[color as keyof typeof state.inkLevels] = levelNum;
+    state.lastUpdated = Date.now();
+    
+    // Save state back to storage
+    const saved = await stateManager.saveState(state);
+    
+    if (!saved) {
+      throw new Error('Failed to save state to storage');
+    }
+    
+    const colorLabel = color.charAt(0).toUpperCase() + color.slice(1);
     return res.status(200).json({ 
       success: true,
-      message 
+      message: `${colorLabel} ink set to ${levelNum}%`,
+      level: levelNum,
+      color: color
     });
   } catch (error) {
-    console.error(`Error refilling ${color} ink:`, error);
+    console.error(`Error setting ${color} ink level:`, error);
     return res.status(500).json({
+      success: false,
       error: 'Internal server error',
       message: error instanceof Error ? error.message : String(error)
     });

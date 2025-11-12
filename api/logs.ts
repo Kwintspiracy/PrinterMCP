@@ -14,6 +14,8 @@ async function getPrinter() {
     const stateManager = new StateManager();
     printerInstance = new VirtualPrinter(stateManager);
   }
+  // Always reload state from storage to get latest updates
+  await printerInstance.reloadState();
   return printerInstance;
 }
 

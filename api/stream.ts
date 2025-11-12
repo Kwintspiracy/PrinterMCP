@@ -17,6 +17,8 @@ async function getPrinter() {
     const stateManager = new StateManager();
     printerInstance = new VirtualPrinter(stateManager);
   }
+  // Always reload state from storage to get latest updates
+  await printerInstance.reloadState();
   return printerInstance;
 }
 
@@ -50,8 +52,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.write(`data: ${JSON.stringify(status)}\n\n`);
 
     // Set up interval to send updates
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       try {
+        // Reload state before each update to ensure fresh data
+        await printer.reloadState();
         const status = printer.getStatus();
         res.write(`data: ${JSON.stringify(status)}\n\n`);
       } catch (error) {

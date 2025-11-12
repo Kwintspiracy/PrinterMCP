@@ -15,6 +15,8 @@ async function getPrinter() {
     const stateManager = new StateManager();
     printerInstance = new VirtualPrinter(stateManager);
   }
+  // Always reload state from storage to get latest updates
+  await printerInstance.reloadState();
   return printerInstance;
 }
 
@@ -39,7 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     const status = printer.getStatus();
     
-    // Ensure the response has the correct structure
+    // Ensure the response has the correct structure with proper fallbacks
     const safeStatus = {
       name: status.name || 'Virtual Inkjet Pro',
       status: status.status || 'initializing',
@@ -60,7 +62,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('Error getting printer status:', error);
     return res.status(500).json({
       error: 'Internal server error',
-      message: error instanceof Error ? error.message : String(error)
+      message: error instanceof Error ? error.message : String(error),
+      // Return a safe default status on error
+      fallback: {
+        name: 'Virtual Inkjet Pro',
+        status: 'error',
+        inkLevels: { cyan: 0, magenta: 0, yellow: 0, black: 0 },
+        paper: { count: 0, capacity: 100, size: 'A4' },
+        currentJob: null,
+        queue: { length: 0, jobs: [] },
+        errors: [{ type: 'system', message: 'Failed to load printer state' }],
+        uptimeSeconds: 0,
+        maintenanceNeeded: false
+      }
     });
   }
 }
