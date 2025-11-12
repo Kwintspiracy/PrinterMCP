@@ -190,6 +190,14 @@ export class VirtualPrinter {
     await this.stateManager.saveState(this.state);
   }
 
+  /**
+   * Reload state from storage
+   * Used when external processes modify the state
+   */
+  async reloadState(): Promise<void> {
+    this.state = await this.stateManager.loadState();
+  }
+
   // Public API Methods
 
   printDocument(params: PrintDocumentParams) {

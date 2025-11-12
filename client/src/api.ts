@@ -170,22 +170,61 @@ export const api = {
 };
 
 export function useSSE(onUpdate: (status: PrinterStatus) => void) {
-  const eventSource = new EventSource(`${API_BASE}/stream`);
+  let eventSource: EventSource | null = null;
+  let reconnectTimeout: NodeJS.Timeout | null = null;
+  let reconnectDelay = 1000; // Start with 1 second
+  const maxReconnectDelay = 30000; // Max 30 seconds
+  let isIntentionallyClosed = false;
 
-  eventSource.onmessage = (event) => {
-    try {
-      const status = JSON.parse(event.data);
-      onUpdate(status);
-    } catch (error) {
-      console.error('Error parsing SSE data:', error);
-    }
+  const connect = () => {
+    if (isIntentionallyClosed) return;
+
+    eventSource = new EventSource(`${API_BASE}/stream`);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const status = JSON.parse(event.data);
+        onUpdate(status);
+        // Reset reconnect delay on successful message
+        reconnectDelay = 1000;
+      } catch (error) {
+        console.error('Error parsing SSE data:', error);
+      }
+    };
+
+    eventSource.onerror = () => {
+      console.error('SSE connection error');
+      
+      if (eventSource?.readyState === EventSource.CLOSED) {
+        eventSource.close();
+        
+        if (!isIntentionallyClosed) {
+          // Attempt reconnection with exponential backoff
+          console.log(`Reconnecting in ${reconnectDelay / 1000}s...`);
+          reconnectTimeout = setTimeout(() => {
+            reconnectDelay = Math.min(reconnectDelay * 2, maxReconnectDelay);
+            connect();
+          }, reconnectDelay);
+        }
+      }
+    };
+
+    eventSource.onopen = () => {
+      console.log('SSE connection established');
+    };
   };
 
-  eventSource.onerror = () => {
-    console.error('SSE connection error');
-  };
+  // Initial connection
+  connect();
 
+  // Cleanup function
   return () => {
-    eventSource.close();
+    isIntentionallyClosed = true;
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout);
+    }
+    if (eventSource) {
+      eventSource.close();
+    }
   };
 }
