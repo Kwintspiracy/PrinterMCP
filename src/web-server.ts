@@ -6,9 +6,8 @@
 
 import express from 'express';
 import path from 'path';
-// Note: Import paths will work after initial build
-const { VirtualPrinter } = require('../build/printer.js');
-const { StateManager } = require('../build/state-manager.js');
+import { VirtualPrinter } from './printer.js';
+import { StateManager } from './state-manager.js';
 
 const PORT = 3001;
 
