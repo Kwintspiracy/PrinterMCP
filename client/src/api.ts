@@ -113,7 +113,7 @@ export const api = {
 
   async getStatistics(): Promise<Statistics> {
     try {
-      const response = await fetch(`${API_BASE}/statistics`);
+      const response = await fetch(`${API_BASE}/info?type=statistics`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -149,7 +149,7 @@ export const api = {
 
   async getLogs(limit: number = 50): Promise<{ logs: LogEntry[] }> {
     try {
-      const response = await fetch(`${API_BASE}/logs?limit=${limit}`);
+      const response = await fetch(`${API_BASE}/info?type=logs&limit=${limit}`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -235,10 +235,19 @@ export const api = {
   },
 
   async loadPaper(count: number, paperSize?: string) {
-    const response = await fetch(`${API_BASE}/load-paper`, {
+    const response = await fetch(`${API_BASE}/control`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ count, paperSize }),
+      body: JSON.stringify({ action: 'load_paper', count, paperSize }),
+    });
+    return response.json();
+  },
+
+  async setPaperCount(count: number, paperSize?: string) {
+    const response = await fetch(`${API_BASE}/control`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'set_paper_count', count, paperSize }),
     });
     return response.json();
   },

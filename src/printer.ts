@@ -487,6 +487,28 @@ export class VirtualPrinter {
     return `Loaded ${added} sheets`;
   }
 
+  setPaperCount(count: number, paperSize?: PaperSize): string {
+    const validatedCount = Math.max(0, Math.min(this.state.paperTrayCapacity, count));
+    const previous = this.state.paperCount;
+    this.state.paperCount = validatedCount;
+    
+    if (paperSize) {
+      this.state.paperSize = paperSize;
+    }
+
+    // Clear out of paper error if paper is now available
+    if (validatedCount > 0) {
+      this.state.errors = this.state.errors.filter((e: PrinterError) => e.type !== 'out_of_paper');
+      if (this.state.status === 'error' && this.state.errors.length === 0) {
+        this.state.status = 'ready';
+      }
+    }
+
+    this.log('info', `Set paper count from ${previous} to ${validatedCount} sheets of ${this.state.paperSize}`);
+    this.saveState();
+    return `Paper count set to ${validatedCount} sheets`;
+  }
+
   cleanPrintHeads(): string {
     this.log('info', 'Running print head cleaning cycle');
     this.state.statistics.maintenanceOperations++;

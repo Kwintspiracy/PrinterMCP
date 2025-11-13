@@ -5,9 +5,10 @@ import { MdPrint } from 'react-icons/md';
 interface PaperTrayProps {
   paper?: { count: number; capacity: number; size: string };
   onLoadPaper: (count: number, size?: string) => void;
+  onSetPaperCount?: (count: number, size?: string) => void;
 }
 
-export default function PaperTray({ paper, onLoadPaper }: PaperTrayProps) {
+export default function PaperTray({ paper, onLoadPaper, onSetPaperCount }: PaperTrayProps) {
   const [count, setCount] = useState(50);
   const [size, setSize] = useState('A4');
 
@@ -33,7 +34,7 @@ export default function PaperTray({ paper, onLoadPaper }: PaperTrayProps) {
         </Text>
         
         <HStack w="full" spacing={2}>
-          <NumberInput size="sm" min={1} max={500} value={count} onChange={(_, val) => setCount(val)}>
+          <NumberInput size="sm" min={0} max={500} value={count} onChange={(_, val) => setCount(val)}>
             <NumberInputField placeholder="Sheets" />
           </NumberInput>
           <Select size="sm" value={size} onChange={(e) => setSize(e.target.value)}>
@@ -45,9 +46,16 @@ export default function PaperTray({ paper, onLoadPaper }: PaperTrayProps) {
             <option value="4x6">4x6</option>
           </Select>
         </HStack>
-        <Button w="full" colorScheme="brand" onClick={() => onLoadPaper(count, size)}>
-          Load Paper
-        </Button>
+        <HStack w="full" spacing={2}>
+          <Button flex={1} colorScheme="brand" onClick={() => onLoadPaper(count, size)}>
+            Load Paper
+          </Button>
+          {onSetPaperCount && (
+            <Button flex={1} colorScheme="blue" variant="outline" onClick={() => onSetPaperCount(count, size)}>
+              Set Count
+            </Button>
+          )}
+        </HStack>
       </VStack>
     </Box>
   );

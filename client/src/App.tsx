@@ -108,6 +108,10 @@ function App() {
               const result = await api.loadPaper(count, size);
               showToast(result.message, result.success ? 'success' : 'error');
             }}
+            onSetPaperCount={async (count, size) => {
+              const result = await api.setPaperCount(count, size);
+              showToast(result.message, result.success ? 'success' : 'error');
+            }}
           />
           <PrintQueue
             queue={status?.queue}
