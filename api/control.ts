@@ -74,6 +74,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         result = printer.loadPaper(params.count, params.paperSize);
         break;
 
+      case 'set_paper_count':
+        if (params.count === undefined) {
+          return res.status(400).json({ error: 'Missing count parameter' });
+        }
+        result = printer.setPaperCount(params.count, params.paperSize);
+        break;
+
       case 'clean_print_heads':
         result = printer.cleanPrintHeads();
         break;
@@ -102,7 +109,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ 
           error: `Unknown action: ${action}`,
           availableActions: [
-            'pause', 'resume', 'cancel_job', 'refill_ink', 'load_paper',
+            'pause', 'resume', 'cancel_job', 'refill_ink', 'load_paper', 'set_paper_count',
             'clean_print_heads', 'align_print_heads', 'run_nozzle_check',
             'clear_paper_jam', 'power_cycle', 'reset'
           ]

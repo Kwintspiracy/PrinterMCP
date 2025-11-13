@@ -1,11 +1,11 @@
 /**
- * Vercel Serverless Function: Get Printer Statistics
- * GET /api/statistics
+ * Vercel Serverless Function: Cancel Print Job
+ * POST /api/cancel/{jobId}
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { VirtualPrinter } from '../build/printer.js';
-import { StateManager } from '../build/state-manager.js';
+import { VirtualPrinter } from '../../build/printer.js';
+import { StateManager } from '../../build/state-manager.js';
 
 let printerInstance: VirtualPrinter | null = null;
 
@@ -23,35 +23,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Accept');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  if (req.method !== 'GET') {
+  if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
+    const { jobId } = req.query;
+
+    if (!jobId || typeof jobId !== 'string') {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Missing or invalid jobId parameter' 
+      });
+    }
+
     const printer = await getPrinter();
-    const statistics = printer.getStatistics();
-    return res.status(200).json(statistics);
+    const result = printer.cancelJob(jobId);
+
+    return res.status(200).json({ 
+      success: true,
+      message: result 
+    });
   } catch (error) {
-    console.error('Error getting printer statistics:', error);
-    // Return safe default statistics instead of 500 error
-    return res.status(200).json({
-      totalPagesPrinted: 0,
-      totalJobs: 0,
-      successfulJobs: 0,
-      failedJobs: 0,
-      completedJobs: 0,
-      totalInkUsed: { cyan: 0, magenta: 0, yellow: 0, black: 0 },
-      maintenanceCycles: 0,
-      totalErrors: 0,
-      averageJobSize: 0,
-      successRate: 0
+    console.error('Error cancelling print job:', error);
+    
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    return res.status(errorMessage.includes('not found') ? 404 : 500).json({
+      success: false,
+      error: errorMessage
     });
   }
 }
