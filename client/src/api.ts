@@ -8,6 +8,9 @@ const API_BASE = import.meta.env?.MODE === 'development'
 export interface PrinterStatus {
   name: string;
   status: string;
+  operationalStatus: 'ready' | 'not_ready' | 'error';
+  canPrint: boolean;
+  issues: string[];
   inkLevels: {
     cyan: number;
     magenta: number;
@@ -77,6 +80,9 @@ export const api = {
       return {
         name: data.name || 'Virtual Printer',
         status: data.status || 'offline',
+        operationalStatus: data.operationalStatus || 'not_ready',
+        canPrint: data.canPrint !== undefined ? data.canPrint : false,
+        issues: data.issues || [],
         inkLevels: data.inkLevels || { cyan: 0, magenta: 0, yellow: 0, black: 0 },
         paper: data.paper || { count: 0, capacity: 100, size: 'A4' },
         currentJob: data.currentJob || null,
@@ -91,6 +97,9 @@ export const api = {
       return {
         name: 'Virtual Printer',
         status: 'offline',
+        operationalStatus: 'error' as const,
+        canPrint: false,
+        issues: ['Unable to connect to printer'],
         inkLevels: { cyan: 0, magenta: 0, yellow: 0, black: 0 },
         paper: { count: 0, capacity: 100, size: 'A4' },
         currentJob: null,
@@ -159,12 +168,37 @@ export const api = {
     quality: string;
     paperSize: string;
   }) {
-    const response = await fetch(`${API_BASE}/print`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    return response.json();
+    try {
+      const response = await fetch(`${API_BASE}/print`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok || result.error) {
+        return {
+          success: false,
+          error: result.error || result.message || `HTTP ${response.status}`,
+          jobId: null
+        };
+      }
+      
+      return {
+        success: true,
+        jobId: result.jobId,
+        message: result.message,
+        estimatedTime: result.estimatedTime
+      };
+    } catch (error) {
+      console.error('Print document error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Network error',
+        jobId: null
+      };
+    }
   },
 
   async cancelJob(jobId: string) {

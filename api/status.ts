@@ -38,15 +38,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     console.log('[StatusAPI] Fetching printer status...');
     const printer = await getPrinter();
-    await printer.ensureInitialized();
     
-    const status = printer.getStatus();
-    console.log('[StatusAPI] Status retrieved:', status.status);
+    const status = printer.getStatus() as any;
+    console.log('[StatusAPI] Status retrieved:', {
+      printerState: status.status,
+      operationalStatus: status.operationalStatus,
+      canPrint: status.canPrint,
+      issuesCount: status.issues?.length || 0
+    });
     
     // Ensure the response has the correct structure with proper fallbacks
     const safeStatus = {
       name: status.name || 'Virtual Inkjet Pro',
       status: status.status || 'initializing',
+      operationalStatus: status.operationalStatus || 'not_ready',
+      canPrint: status.canPrint !== undefined ? status.canPrint : false,
+      issues: status.issues || [],
       inkLevels: status.inkLevels || { cyan: 0, magenta: 0, yellow: 0, black: 0 },
       paper: status.paper || { count: 0, capacity: 100, size: 'A4' },
       currentJob: status.currentJob || null,

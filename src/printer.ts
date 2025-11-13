@@ -325,10 +325,86 @@ export class VirtualPrinter {
     return `Job ${jobId} cancelled`;
   }
 
+  /**
+   * Calculate operational status based on printer conditions
+   */
+  private calculateOperationalStatus(): {
+    status: 'ready' | 'not_ready' | 'error';
+    canPrint: boolean;
+    issues: string[];
+  } {
+    const issues: string[] = [];
+    let canPrint = true;
+    let status: 'ready' | 'not_ready' | 'error' = 'ready';
+
+    // Check ink levels
+    const depletedInks: string[] = [];
+    const lowInks: string[] = [];
+    for (const [color, level] of Object.entries(this.state.inkLevels) as [string, number][]) {
+      if (level === 0) {
+        depletedInks.push(color);
+        canPrint = false;
+      } else if (level < 15) {
+        lowInks.push(color);
+      }
+    }
+
+    if (depletedInks.length > 0) {
+      issues.push(`Depleted ink: ${depletedInks.join(', ')}`);
+      status = 'not_ready';
+    }
+    if (lowInks.length > 0) {
+      issues.push(`Low ink: ${lowInks.join(', ')}`);
+    }
+
+    // Check paper
+    if (this.state.paperCount === 0) {
+      issues.push('Out of paper');
+      canPrint = false;
+      status = 'not_ready';
+    } else if (this.state.paperCount < 10) {
+      issues.push(`Low paper (${this.state.paperCount} sheets remaining)`);
+    }
+
+    // Check for critical errors
+    const criticalErrors = this.state.errors.filter((e: PrinterError) => 
+      e.severity === 'error' || e.type === 'paper_jam'
+    );
+    if (criticalErrors.length > 0) {
+      issues.push(...criticalErrors.map((e: PrinterError) => e.message));
+      canPrint = false;
+      status = 'error';
+    }
+
+    // Check printer state
+    if (this.state.status === 'error' || this.state.status === 'offline') {
+      canPrint = false;
+      status = 'error';
+    } else if (this.state.status === 'warming_up') {
+      canPrint = false;
+      status = 'not_ready';
+      if (!issues.includes('Printer warming up')) {
+        issues.push('Printer warming up');
+      }
+    }
+
+    // If no issues and state is ready/printing, set to ready
+    if (issues.length === 0 && (this.state.status === 'ready' || this.state.status === 'printing')) {
+      status = 'ready';
+    }
+
+    return { status, canPrint, issues };
+  }
+
   getStatus() {
+    const operational = this.calculateOperationalStatus();
+
     return {
       name: this.state.name,
       status: this.state.status,
+      operationalStatus: operational.status,
+      canPrint: operational.canPrint,
+      issues: operational.issues,
       inkLevels: this.state.inkLevels,
       paper: {
         count: this.state.paperCount,
