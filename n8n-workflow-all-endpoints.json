@@ -1,0 +1,519 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/status",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [0, 0],
+      "id": "node_status",
+      "name": "Get Status (WORKING)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/statistics",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [250, 0],
+      "id": "node_statistics",
+      "name": "Get Statistics (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/logs?limit=100",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [500, 0],
+      "id": "node_logs",
+      "name": "Get Logs (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/diagnostics",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [750, 0],
+      "id": "node_diagnostics",
+      "name": "Get Diagnostics (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/print",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"documentName\": \"Document\", \"pages\": 1, \"color\": false, \"quality\": \"normal\", \"paperSize\": \"A4\"}",
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [0, 100],
+      "id": "node_print",
+      "name": "Print Document (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/control",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"action\": \"pause\"}",
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [250, 100],
+      "id": "node_pause",
+      "name": "Pause Printer (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/control",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"action\": \"resume\"}",
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [500, 100],
+      "id": "node_resume",
+      "name": "Resume Printer (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/control",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"action\": \"cancel_job\", \"jobId\": \"job-123\"}",
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [750, 100],
+      "id": "node_cancel",
+      "name": "Cancel Job (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/control",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"action\": \"refill_ink\", \"color\": \"cyan\"}",
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [0, 200],
+      "id": "node_refill",
+      "name": "Refill Ink (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/control",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"action\": \"load_paper\", \"count\": 100, \"paperSize\": \"A4\"}",
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [250, 200],
+      "id": "node_load_paper",
+      "name": "Load Paper (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/control",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"action\": \"clean_print_heads\"}",
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [500, 200],
+      "id": "node_clean",
+      "name": "Clean Print Heads (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/control",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"action\": \"align_print_heads\"}",
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [750, 200],
+      "id": "node_align",
+      "name": "Align Print Heads (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/control",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"action\": \"run_nozzle_check\"}",
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [0, 300],
+      "id": "node_nozzle",
+      "name": "Run Nozzle Check (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/control",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"action\": \"clear_paper_jam\"}",
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [250, 300],
+      "id": "node_clear_jam",
+      "name": "Clear Paper Jam (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/control",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"action\": \"power_cycle\"}",
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [500, 300],
+      "id": "node_power",
+      "name": "Power Cycle (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/control",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"action\": \"reset\"}",
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [750, 300],
+      "id": "node_reset",
+      "name": "Reset Printer (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/set-ink/cyan",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"level\": 50}",
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [0, 400],
+      "id": "node_cyan",
+      "name": "Set Cyan Ink Level (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/set-ink/magenta",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"level\": 50}",
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [250, 400],
+      "id": "node_magenta",
+      "name": "Set Magenta Ink Level (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/set-ink/yellow",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"level\": 50}",
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [500, 400],
+      "id": "node_yellow",
+      "name": "Set Yellow Ink Level (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/set-ink/black",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"level\": 50}",
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [750, 400],
+      "id": "node_black",
+      "name": "Set Black Ink Level (DEPLOY FIRST)"
+    },
+    {
+      "parameters": {
+        "url": "https://virtualprintermcp.vercel.app/api/stream",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "text/event-stream"
+            }
+          ]
+        },
+        "options": {},
+        "notice": "⚠️ Endpoint not deployed yet - run: vercel --prod"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [375, 500],
+      "id": "node_stream",
+      "name": "Stream Status (DEPLOY FIRST)"
+    }
+  ],
+  "connections": {},
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "virtualprintermcp"
+  }
+}
