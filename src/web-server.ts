@@ -40,9 +40,9 @@ app.get('/api/status', (req, res) => {
     const status = printer.getStatus();
     res.json(status);
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -57,9 +57,9 @@ app.get('/api/queue', (req, res) => {
       pendingJobs: status.queue.jobs
     });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -70,9 +70,9 @@ app.get('/api/statistics', (req, res) => {
     const stats = printer.getStatistics();
     res.json(stats);
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -80,17 +80,56 @@ app.get('/api/statistics', (req, res) => {
 // Get logs
 app.get('/api/logs', (req, res) => {
   try {
-    const limit = parseInt(req.query.limit as string) || 100;
-    const logs = printer.getLogs(limit).map((log: any) => ({
-      timestamp: new Date(log.timestamp).toISOString(),
+    const limit = parseInt(req.query.limit as string) || 50;
+    const logs = printer.getLogs(limit).map(log => ({
+      timestamp: log.timestamp,
       level: log.level,
       message: log.message
     }));
     res.json({ logs });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+// Set paper count to specific value
+app.post('/api/set-paper', async (req, res) => {
+  try {
+    const { count, paperSize } = req.body;
+
+    if (count === undefined || count < 0 || count > 500) {
+      return res.status(400).json({
+        success: false,
+        error: 'count must be between 0 and 500'
+      });
+    }
+
+    // Load current state, modify it, and save it back
+    const state = await stateManager.loadState();
+    state.paperCount = count;
+    if (paperSize) {
+      state.paperSize = paperSize;
+    }
+    await stateManager.saveState(state);
+
+    // Reload printer state to reflect changes immediately
+    await printer.reloadState();
+
+    // Log the change
+    console.log(`Set paper count to ${count} sheets${paperSize ? ` (${paperSize})` : ''}`);
+
+    res.json({
+      success: true,
+      message: `Paper count set to ${count} sheets${paperSize ? ` (${paperSize})` : ''}`
+    });
+  } catch (error) {
+    console.error('Error setting paper count:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -101,9 +140,9 @@ app.get('/api/capabilities', (req, res) => {
     const capabilities = printer.getCapabilities();
     res.json(capabilities);
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -112,11 +151,11 @@ app.get('/api/capabilities', (req, res) => {
 app.post('/api/print', (req, res) => {
   try {
     const { documentName, pages, color, quality, paperSize } = req.body;
-    
+
     if (!documentName || !pages) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'documentName and pages are required' 
+      return res.status(400).json({
+        success: false,
+        error: 'documentName and pages are required'
       });
     }
 
@@ -135,9 +174,9 @@ app.post('/api/print', (req, res) => {
       estimatedTimeSeconds: result.estimatedTime
     });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -148,9 +187,9 @@ app.post('/api/cancel/:jobId', (req, res) => {
     const message = printer.cancelJob(req.params.jobId);
     res.json({ success: true, message });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -161,9 +200,9 @@ app.post('/api/pause', (req, res) => {
     const message = printer.pause();
     res.json({ success: true, message });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -174,9 +213,9 @@ app.post('/api/resume', (req, res) => {
     const message = printer.resume();
     res.json({ success: true, message });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -188,9 +227,9 @@ app.post('/api/refill/:color', (req, res) => {
     const message = printer.refillInk(color);
     res.json({ success: true, message });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -200,11 +239,11 @@ app.post('/api/set-ink/:color', async (req, res) => {
   try {
     const color = req.params.color as 'cyan' | 'magenta' | 'yellow' | 'black';
     const { level } = req.body;
-    
+
     if (level === undefined || level < 0 || level > 100) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'level must be between 0 and 100' 
+      return res.status(400).json({
+        success: false,
+        error: 'level must be between 0 and 100'
       });
     }
 
@@ -212,22 +251,22 @@ app.post('/api/set-ink/:color', async (req, res) => {
     const state = await stateManager.loadState();
     state.inkLevels[color] = level;
     await stateManager.saveState(state);
-    
+
     // Reload printer state to reflect changes immediately
     await printer.reloadState();
-    
+
     // Log the change
     console.log(`Set ${color} ink to ${level}%`);
-    
-    res.json({ 
-      success: true, 
-      message: `${color.charAt(0).toUpperCase() + color.slice(1)} ink set to ${level}%` 
+
+    res.json({
+      success: true,
+      message: `${color.charAt(0).toUpperCase() + color.slice(1)} ink set to ${level}%`
     });
   } catch (error) {
     console.error('Error setting ink level:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -236,20 +275,20 @@ app.post('/api/set-ink/:color', async (req, res) => {
 app.post('/api/load-paper', (req, res) => {
   try {
     const { count, paperSize } = req.body;
-    
+
     if (!count) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'count is required' 
+      return res.status(400).json({
+        success: false,
+        error: 'count is required'
       });
     }
 
     const message = printer.loadPaper(count, paperSize);
     res.json({ success: true, message });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -260,9 +299,9 @@ app.post('/api/clean', (req, res) => {
     const message = printer.cleanPrintHeads();
     res.json({ success: true, message });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -273,9 +312,9 @@ app.post('/api/align', (req, res) => {
     const message = printer.alignPrintHeads();
     res.json({ success: true, message });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -286,9 +325,9 @@ app.post('/api/nozzle-check', (req, res) => {
     const message = printer.runNozzleCheck();
     res.json({ success: true, message });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -299,9 +338,9 @@ app.post('/api/clear-jam', (req, res) => {
     const message = printer.clearPaperJam();
     res.json({ success: true, message });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -312,9 +351,9 @@ app.post('/api/power-cycle', (req, res) => {
     const message = printer.powerCycle();
     res.json({ success: true, message });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -325,9 +364,9 @@ app.post('/api/reset', (req, res) => {
     const message = printer.reset();
     res.json({ success: true, message });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });

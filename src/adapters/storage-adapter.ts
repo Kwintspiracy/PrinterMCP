@@ -34,6 +34,7 @@ export interface PrinterState {
   logs: any[];
   lastUpdated: number;
   capabilities: any;
+  version: number; // For optimistic locking
 }
 
 /**
@@ -45,24 +46,24 @@ export interface IStorageAdapter {
    * @returns Printer state or null if not found
    */
   loadState(): Promise<PrinterState | null>;
-  
+
   /**
    * Save printer state to storage
    * @param state Printer state to save
    */
   saveState(state: PrinterState): Promise<void>;
-  
+
   /**
    * Check if storage is available and working
    * @returns true if storage is healthy
    */
   healthCheck(): Promise<boolean>;
-  
+
   /**
    * Clear all stored state (factory reset)
    */
   clearState(): Promise<void>;
-  
+
   /**
    * Get storage type identifier
    */
@@ -76,9 +77,9 @@ export async function createStorageAdapter(): Promise<IStorageAdapter> {
   // Auto-detect Vercel environment
   const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
   const storageType = process.env.STORAGE_TYPE || (isVercel ? 'vercel-kv' : 'file');
-  
+
   console.log(`Storage adapter: type=${storageType}, isVercel=${isVercel}`);
-  
+
   switch (storageType) {
     case 'supabase':
       try {
@@ -89,7 +90,7 @@ export async function createStorageAdapter(): Promise<IStorageAdapter> {
         const { FileStorage } = await import('./file-storage.js');
         return new FileStorage();
       }
-    
+
     case 'vercel-kv':
       try {
         const { VercelKVStorage } = await import('./vercel-storage.js');
@@ -99,7 +100,7 @@ export async function createStorageAdapter(): Promise<IStorageAdapter> {
         const { FileStorage } = await import('./file-storage.js');
         return new FileStorage();
       }
-    
+
     case 'file':
     default:
       const { FileStorage } = await import('./file-storage.js');

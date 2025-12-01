@@ -28,7 +28,7 @@ export class VirtualPrinter {
     this.stateManager = stateManager;
     // Detect serverless environment (Vercel)
     this.isServerless = !!(process.env.VERCEL || process.env.STORAGE_TYPE === 'vercel-kv');
-    
+
     // Log environment detection
     console.log('[PrinterInit] Environment Detection:', {
       VERCEL: process.env.VERCEL,
@@ -36,13 +36,13 @@ export class VirtualPrinter {
       isServerless: this.isServerless,
       NODE_ENV: process.env.NODE_ENV
     });
-    
+
     this.initPromise = this.initialize();
   }
 
   private async initialize() {
     console.log('[PrinterInit] Starting initialization...');
-    
+
     try {
       this.state = await this.stateManager.loadState();
       console.log('[PrinterInit] State loaded:', {
@@ -51,7 +51,7 @@ export class VirtualPrinter {
         hasInkLevels: !!this.state.inkLevels,
         paperCount: this.state.paperCount
       });
-      
+
       if (this.isServerless) {
         console.log('[PrinterInit] Serverless mode detected');
         // Serverless: Always ensure ready state regardless of current status
@@ -60,7 +60,7 @@ export class VirtualPrinter {
           console.log(`[PrinterInit] Converting status from '${this.state.status}' to 'ready'`);
           this.state.status = 'ready';
           this.log('info', 'Printer ready (serverless mode)');
-          
+
           try {
             await this.saveState();
             console.log('[PrinterInit] Status saved successfully');
@@ -79,7 +79,7 @@ export class VirtualPrinter {
           this.log('info', 'Printer warming up...');
           this.state.status = 'warming_up';
           await this.saveState();
-          
+
           setTimeout(async () => {
             this.state.status = 'ready';
             this.log('info', 'Printer ready');
@@ -87,11 +87,11 @@ export class VirtualPrinter {
             console.log('[PrinterInit] Warm-up complete');
           }, 12000);
         }
-        
+
         // Start interval processing in local/persistent environments
         this.startProcessing();
       }
-      
+
       console.log('[PrinterInit] Initialization complete, final status:', this.state.status);
     } catch (error) {
       console.error('[PrinterInit] Initialization failed:', error);
@@ -109,7 +109,7 @@ export class VirtualPrinter {
 
   private startProcessing() {
     if (this.processingInterval) return;
-    
+
     this.processingInterval = setInterval(async () => {
       await this.processQueue();
     }, 1000);
@@ -184,7 +184,7 @@ export class VirtualPrinter {
       this.state.statistics.totalInkUsed.magenta += rate;
       this.state.statistics.totalInkUsed.yellow += rate;
     }
-    
+
     this.state.inkLevels.black = Math.max(0, this.state.inkLevels.black - rate);
     this.state.statistics.totalInkUsed.black += rate;
 
@@ -203,7 +203,7 @@ export class VirtualPrinter {
 
   private async consumePaper(count: number) {
     this.state.paperCount = Math.max(0, this.state.paperCount - count);
-    
+
     if (this.state.paperCount === 0) {
       this.state.status = 'error';
       this.addError({
@@ -245,10 +245,30 @@ export class VirtualPrinter {
     }
   }
 
-  private async saveState() {
+
+  private async saveState(retries: number = 3) {
     this.state.lastUpdated = Date.now();
-    await this.stateManager.saveState(this.state);
+
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        const success = await this.stateManager.saveState(this.state);
+        if (success) return;
+
+        // If save failed, wait and retry
+        if (attempt < retries - 1) {
+          await new Promise(resolve => setTimeout(resolve, 50 * Math.pow(2, attempt)));
+          // Reload state to get latest version
+          await this.reloadState();
+        }
+      } catch (error) {
+        console.error(`Save attempt ${attempt + 1} failed:`, error);
+        if (attempt === retries - 1) {
+          console.error('All save attempts failed, state may not persist');
+        }
+      }
+    }
   }
+
 
   /**
    * Reload state from storage
@@ -256,7 +276,7 @@ export class VirtualPrinter {
    */
   async reloadState(): Promise<void> {
     this.state = await this.stateManager.loadState();
-    
+
     // In serverless mode, always force status to ready after reloading
     // This handles cases where storage fails or contains stale state
     if (this.isServerless && this.state.status !== 'ready' && this.state.status !== 'printing') {
@@ -265,9 +285,67 @@ export class VirtualPrinter {
     }
   }
 
+  /**
+   * Update state based on time elapsed since last update
+   * Critical for serverless environments where process doesn't run continuously
+   */
+  async updateState(): Promise<void> {
+    // Always reload state first to get latest from storage
+    await this.reloadState();
+
+    if (this.state.status === 'printing' && this.state.currentJob) {
+      const now = Date.now();
+      const elapsedSinceLastUpdate = (now - this.state.lastUpdated) / 1000;
+
+      if (elapsedSinceLastUpdate > 0.5) {
+        // Calculate how much progress should have happened
+        const job = this.state.currentJob;
+        const timeRemaining = Math.max(0, job.estimatedTime * (1 - job.progress / 100));
+
+        // If enough time passed to finish the job
+        if (elapsedSinceLastUpdate >= timeRemaining) {
+          // Finish the job
+          job.progress = 100;
+          job.status = 'completed';
+          job.completedAt = now;
+
+          this.state.queue.shift();
+          this.state.completedJobs.push(job);
+          this.state.currentJob = null;
+          this.state.status = 'ready';
+          this.state.statistics.successfulJobs++;
+          this.state.statistics.totalPagesPrinted += job.pages;
+
+          // Consume resources for the whole job (simplified)
+          await this.consumeInk(job);
+          await this.consumePaper(job.pages);
+
+          this.log('info', `Completed print job: ${job.documentName} (simulated)`);
+
+          // If there are more jobs, queue next one? 
+          // For simplicity in serverless, we just finish the current one. 
+          // Realistically we should loop through queue if enough time passed.
+        } else {
+          // Update progress
+          const progressIncrement = (elapsedSinceLastUpdate / job.estimatedTime) * 100;
+          job.progress = Math.min(99, job.progress + progressIncrement);
+
+          // Partial resource consumption could be implemented here
+        }
+
+        await this.saveState();
+      }
+    }
+  }
+
   // Public API Methods
 
   printDocument(params: PrintDocumentParams) {
+    // Ensure state is up to date before adding job
+    // We don't await here to keep signature sync-like if needed, but better to await if possible.
+    // Since this is called from async handler, we should probably make these async or rely on the handler calling updateState first.
+    // For now, we'll trust the handler calls updateState/reloadState.
+
     const job: PrintJob = {
       id: `job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       documentName: params.documentName,
@@ -285,6 +363,11 @@ export class VirtualPrinter {
     this.state.statistics.totalJobs++;
     this.log('info', `Print job queued: ${params.documentName}`);
     this.saveState();
+
+    // Trigger processing immediately if ready
+    if (this.state.status === 'ready') {
+      this.processQueue();
+    }
 
     return {
       jobId: job.id,
@@ -367,7 +450,7 @@ export class VirtualPrinter {
     }
 
     // Check for critical errors
-    const criticalErrors = this.state.errors.filter((e: PrinterError) => 
+    const criticalErrors = this.state.errors.filter((e: PrinterError) =>
       e.severity === 'error' || e.type === 'paper_jam'
     );
     if (criticalErrors.length > 0) {
@@ -397,6 +480,7 @@ export class VirtualPrinter {
   }
 
   getStatus() {
+    // Note: In serverless, updateState() should be called before this
     const operational = this.calculateOperationalStatus();
 
     return {
@@ -471,7 +555,7 @@ export class VirtualPrinter {
     const newCount = Math.min(this.state.paperTrayCapacity, this.state.paperCount + count);
     const added = newCount - this.state.paperCount;
     this.state.paperCount = newCount;
-    
+
     if (paperSize) {
       this.state.paperSize = paperSize;
     }
@@ -491,7 +575,7 @@ export class VirtualPrinter {
     const validatedCount = Math.max(0, Math.min(this.state.paperTrayCapacity, count));
     const previous = this.state.paperCount;
     this.state.paperCount = validatedCount;
-    
+
     if (paperSize) {
       this.state.paperSize = paperSize;
     }
@@ -513,12 +597,12 @@ export class VirtualPrinter {
     this.log('info', 'Running print head cleaning cycle');
     this.state.statistics.maintenanceOperations++;
     this.state.statistics.lastMaintenanceDate = Date.now();
-    
+
     // Consume ink
     Object.keys(this.state.inkLevels).forEach(color => {
       this.state.inkLevels[color] = Math.max(0, this.state.inkLevels[color] - 2);
     });
-    
+
     this.saveState();
     return 'Print head cleaning cycle completed';
   }
@@ -527,11 +611,11 @@ export class VirtualPrinter {
     this.log('info', 'Running print head alignment');
     this.state.statistics.maintenanceOperations++;
     this.consumePaper(1);
-    
+
     Object.keys(this.state.inkLevels).forEach(color => {
       this.state.inkLevels[color] = Math.max(0, this.state.inkLevels[color] - 1);
     });
-    
+
     this.saveState();
     return 'Print head alignment completed';
   }
@@ -566,7 +650,7 @@ export class VirtualPrinter {
       this.state.status = 'offline';
       this.log('info', 'Power cycling printer');
       this.saveState();
-      
+
       setTimeout(async () => {
         this.state.status = 'warming_up';
         await this.saveState();
@@ -577,7 +661,7 @@ export class VirtualPrinter {
           await this.saveState();
         }, 12000);
       }, 3000);
-      
+
       return 'Power cycling printer...';
     }
   }

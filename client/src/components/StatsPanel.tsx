@@ -1,4 +1,5 @@
-import { Box, Heading, SimpleGrid, Stat, StatLabel, StatNumber } from '@chakra-ui/react';
+import { Box, Heading, SimpleGrid, Stat, StatLabel, StatNumber, Card, CardBody, useColorModeValue, Icon, VStack } from '@chakra-ui/react';
+import { FiFileText, FiCheckCircle, FiXCircle, FiTrendingUp } from 'react-icons/fi';
 import { Statistics } from '../api';
 
 interface StatsPanelProps {
@@ -6,27 +7,69 @@ interface StatsPanelProps {
 }
 
 export default function StatsPanel({ stats }: StatsPanelProps) {
+  const statBg = useColorModeValue('gray.50', 'gray.700');
+
+  const statCards = [
+    {
+      label: 'Total Pages',
+      value: stats?.totalPagesPrinted || 0,
+      icon: FiFileText,
+      color: 'blue.500'
+    },
+    {
+      label: 'Success Rate',
+      value: `${stats?.successRate || 0}%`,
+      icon: FiTrendingUp,
+      color: 'green.500'
+    },
+    {
+      label: 'Completed Jobs',
+      value: stats?.completedJobs || 0,
+      icon: FiCheckCircle,
+      color: 'blue.500'
+    },
+    {
+      label: 'Failed Jobs',
+      value: stats?.failedJobs || 0,
+      icon: FiXCircle,
+      color: 'red.500'
+    },
+  ];
+
   return (
-    <Box bg="white" p={6} borderRadius="lg" shadow="sm">
-      <Heading size="md" mb={4} color="brand.500">Statistics</Heading>
-      <SimpleGrid columns={2} spacing={4}>
-        <Stat>
-          <StatLabel>Total Pages</StatLabel>
-          <StatNumber color="brand.500">{stats?.totalPagesPrinted || 0}</StatNumber>
-        </Stat>
-        <Stat>
-          <StatLabel>Success Rate</StatLabel>
-          <StatNumber color="brand.500">{stats?.successRate || 0}%</StatNumber>
-        </Stat>
-        <Stat>
-          <StatLabel>Completed Jobs</StatLabel>
-          <StatNumber color="brand.500">{stats?.completedJobs || 0}</StatNumber>
-        </Stat>
-        <Stat>
-          <StatLabel>Failed Jobs</StatLabel>
-          <StatNumber color="brand.500">{stats?.failedJobs || 0}</StatNumber>
-        </Stat>
-      </SimpleGrid>
-    </Box>
+    <Card>
+      <CardBody>
+        <Heading size="md" mb={6} fontWeight="600" letterSpacing="-0.5px">
+          Statistics
+        </Heading>
+        <SimpleGrid columns={{ base: 2, md: 2 }} spacing={4}>
+          {statCards.map((stat, index) => (
+            <Box
+              key={index}
+              p={4}
+              bg={statBg}
+              borderRadius="lg"
+              transition="all 0.2s"
+              _hover={{
+                transform: 'translateY(-2px)',
+                shadow: 'md',
+              }}
+            >
+              <VStack align="start" spacing={2}>
+                <Icon as={stat.icon} boxSize={6} color={stat.color} />
+                <Stat>
+                  <StatLabel fontSize="xs" fontWeight="600" color={useColorModeValue('gray.600', 'gray.400')}>
+                    {stat.label}
+                  </StatLabel>
+                  <StatNumber fontSize="2xl" fontWeight="bold" color={stat.color}>
+                    {stat.value}
+                  </StatNumber>
+                </Stat>
+              </VStack>
+            </Box>
+          ))}
+        </SimpleGrid>
+      </CardBody>
+    </Card>
   );
 }

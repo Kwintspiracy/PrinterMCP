@@ -47,7 +47,7 @@ export class StateManager {
   async loadState(): Promise<FullPrinterState> {
     try {
       await this.ensureInitialized();
-      
+
       if (this.storage) {
         const state = await this.storage.loadState();
         if (state) {
@@ -69,7 +69,10 @@ export class StateManager {
   async saveState(state: FullPrinterState): Promise<boolean> {
     try {
       await this.ensureInitialized();
-      
+
+      // Increment version for optimistic locking
+      state.version = (state.version || 0) + 1;
+
       if (this.storage) {
         await this.storage.saveState(state);
         return true;
@@ -120,7 +123,8 @@ export class StateManager {
       lastUpdated: Date.now(),
       lastStartTime: Date.now(),
       capabilities: this.getDefaultCapabilities(),
-      configuration: this.getDefaultConfiguration()
+      configuration: this.getDefaultConfiguration(),
+      version: 0
     };
   }
 
@@ -163,7 +167,7 @@ export class StateManager {
    */
   validateState(state: any): FullPrinterState {
     const defaultState = this.getDefaultState();
-    
+
     return {
       name: state.name || defaultState.name,
       status: state.status || defaultState.status,
@@ -181,7 +185,8 @@ export class StateManager {
       lastUpdated: state.lastUpdated || Date.now(),
       lastStartTime: state.lastStartTime || Date.now(),
       capabilities: state.capabilities || defaultState.capabilities,
-      configuration: state.configuration || defaultState.configuration
+      configuration: state.configuration || defaultState.configuration,
+      version: state.version || 0
     };
   }
 
@@ -191,7 +196,7 @@ export class StateManager {
   async deleteState(): Promise<boolean> {
     try {
       await this.ensureInitialized();
-      
+
       if (this.storage) {
         await this.storage.clearState();
         return true;
@@ -209,7 +214,7 @@ export class StateManager {
   async healthCheck(): Promise<boolean> {
     try {
       await this.ensureInitialized();
-      
+
       if (this.storage) {
         return await this.storage.healthCheck();
       }
