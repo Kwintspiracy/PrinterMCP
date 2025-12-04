@@ -13,11 +13,12 @@ export class SupabaseStorage implements IStorageAdapter {
   private getClient(): SupabaseClient {
     if (!this.client) {
       const supabaseUrl = process.env.SUPABASE_URL;
-      const supabaseKey = process.env.SUPABASE_KEY;
+      // Support both SUPABASE_ANON_KEY and SUPABASE_KEY for flexibility
+      const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY;
 
       if (!supabaseUrl || !supabaseKey) {
         throw new Error(
-          'Supabase credentials not found. Set SUPABASE_URL and SUPABASE_KEY environment variables.'
+          'Supabase credentials not found. Set SUPABASE_URL and SUPABASE_ANON_KEY environment variables.'
         );
       }
 

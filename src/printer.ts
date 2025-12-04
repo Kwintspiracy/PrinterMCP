@@ -415,6 +415,8 @@ export class VirtualPrinter {
     status: 'ready' | 'not_ready' | 'error';
     canPrint: boolean;
     issues: string[];
+    depletedInks: string[];
+    lowInks: string[];
   } {
     const issues: string[] = [];
     let canPrint = true;
@@ -476,7 +478,7 @@ export class VirtualPrinter {
       status = 'ready';
     }
 
-    return { status, canPrint, issues };
+    return { status, canPrint, issues, depletedInks, lowInks };
   }
 
   getStatus() {
@@ -490,6 +492,10 @@ export class VirtualPrinter {
       canPrint: operational.canPrint,
       issues: operational.issues,
       inkLevels: this.state.inkLevels,
+      inkStatus: {
+        depleted: operational.depletedInks,
+        low: operational.lowInks
+      },
       paper: {
         count: this.state.paperCount,
         capacity: this.state.paperTrayCapacity,

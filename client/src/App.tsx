@@ -1,18 +1,24 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Box,
   Container,
   Flex,
-  Heading,
-  Badge,
-  Grid,
+  HStack,
+  Text,
   useToast,
   IconButton,
   useColorMode,
-  Text,
+  useColorModeValue,
+  Grid,
   GridItem,
+  Icon,
+  Tabs,
+  TabList,
+  Tab,
+  Tooltip,
 } from '@chakra-ui/react';
 import { MoonIcon, SunIcon } from '@chakra-ui/icons';
+import { FiPrinter, FiActivity, FiBell, FiSettings, FiGitBranch } from 'react-icons/fi';
 import { api, PrinterStatus, Statistics, useSSE } from './api';
 import StatusPanel from './components/StatusPanel';
 import InkLevels from './components/InkLevels';
@@ -22,231 +28,502 @@ import ControlPanel from './components/ControlPanel';
 import PrintForm from './components/PrintForm';
 import StatsPanel from './components/StatsPanel';
 import EventLog from './components/EventLog';
+import Sidebar from './components/Sidebar';
 
 function App() {
   const [status, setStatus] = useState<PrinterStatus | null>(null);
   const [stats, setStats] = useState<Statistics | null>(null);
+  const [activeTab, setActiveTab] = useState(0);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [selectedPrinterId, setSelectedPrinterId] = useState<string | undefined>(undefined);
+  const [currentLocationId, setCurrentLocationId] = useState<string>('loc-home'); // Default to Home
   const toast = useToast();
   const { colorMode, toggleColorMode } = useColorMode();
+  
+  // Use ref to track selected printer ID for polling (avoids stale closure)
+  const selectedPrinterIdRef = useRef<string | undefined>(undefined);
+  // Track if SSE should be disabled
+  const sseDisabledRef = useRef(false);
 
-  // Real-time updates via SSE
-  useEffect(() => {
-    const cleanup = useSSE((newStatus) => {
-      setStatus(newStatus);
-    });
+  // GitHub-style colors
+  const headerBg = useColorModeValue('canvasLight.default', 'canvas.subtle');
+  const borderColor = useColorModeValue('borderLight.default', 'border.default');
+  const canvasBg = useColorModeValue('canvasLight.subtle', 'canvas.default');
+  const mutedText = useColorModeValue('fgLight.muted', 'fg.muted');
 
-    // Load initial statistics
-    api.getStatistics().then(setStats).catch(console.error);
-
-    return cleanup;
-  }, []);
-
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+  // Show toast helper
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
     toast({
       title: message,
       status: type,
       duration: 3000,
       isClosable: true,
-      position: 'top-right',
+      position: 'top',
     });
-  };
+  }, [toast]);
 
-  const getStatusColor = (status?: string) => {
-    switch (status) {
+  // Handle location selection from sidebar
+  const handleSelectLocation = useCallback((locationId: string) => {
+    console.log('[App] Selecting location:', locationId);
+    setCurrentLocationId(locationId);
+    showToast(`Location set to ${locationId === 'loc-home' ? 'Home' : 'Office'}`, 'info');
+  }, [showToast]);
+
+  // Handle printer selection from sidebar (just for viewing, doesn't change location)
+  const handleSelectPrinter = useCallback(async (printerId: string) => {
+    console.log('[App] Selecting printer:', printerId);
+    
+    // Update both state and ref immediately
+    setSelectedPrinterId(printerId);
+    selectedPrinterIdRef.current = printerId;
+    sseDisabledRef.current = true; // Disable SSE updates when selecting specific printer
+    
+    // Immediately fetch status for the selected printer
+    try {
+      console.log('[App] Fetching status for printer:', printerId);
+      const data = await api.getStatus(printerId);
+      console.log('[App] Received status:', data.name, data.id);
+      
+      setStatus(data);
+      showToast(`Selected: ${data.name}`, 'info');
+      
+      // If status includes statistics, use them
+      if (data.statistics) {
+        setStats({
+          totalPagesPrinted: data.statistics.totalPagesPrinted || 0,
+          totalJobs: data.statistics.totalJobs || 0,
+          successfulJobs: data.statistics.successfulJobs || 0,
+          failedJobs: data.statistics.failedJobs || 0,
+          completedJobs: data.statistics.successfulJobs || 0,
+          totalInkUsed: data.statistics.totalInkUsed || { cyan: 0, magenta: 0, yellow: 0, black: 0 },
+          maintenanceCycles: data.statistics.maintenanceCycles || 0,
+          totalErrors: data.statistics.totalErrors || 0,
+          averageJobSize: data.statistics.averageJobSize || 0,
+          successRate: data.statistics.totalJobs > 0 
+            ? (data.statistics.successfulJobs / data.statistics.totalJobs) * 100 
+            : 100,
+        });
+      }
+    } catch (error) {
+      console.error('[App] Failed to fetch printer status:', error);
+      showToast('Failed to load printer status', 'error');
+    }
+  }, [showToast]);
+
+  // Real-time updates via SSE + fallback polling
+  useEffect(() => {
+    let pollInterval: NodeJS.Timeout | null = null;
+    let sseCleanup: (() => void) | null = null;
+    
+    console.log('[App] Setting up SSE and polling');
+    
+    // Set up SSE for real-time updates (will be ignored when specific printer selected)
+    sseCleanup = useSSE((newStatus) => {
+      // Only update from SSE if no specific printer is selected
+      if (!sseDisabledRef.current) {
+        console.log('[App] SSE update received:', newStatus.name);
+        setStatus(newStatus);
+      } else {
+        console.log('[App] SSE update ignored (multi-printer mode)');
+      }
+    });
+
+    // Polling function - respects selected printer
+    const poll = async () => {
+      const printerId = selectedPrinterIdRef.current;
+      console.log('[App] Polling for printer:', printerId || 'default');
+      
+      try {
+        const data = await api.getStatus(printerId);
+        console.log('[App] Poll received:', data.name, data.id);
+        setStatus(data);
+        
+        // Update stats from multi-printer status if available
+        if (data.statistics && printerId) {
+          setStats({
+            totalPagesPrinted: data.statistics.totalPagesPrinted || 0,
+            totalJobs: data.statistics.totalJobs || 0,
+            successfulJobs: data.statistics.successfulJobs || 0,
+            failedJobs: data.statistics.failedJobs || 0,
+            completedJobs: data.statistics.successfulJobs || 0,
+            totalInkUsed: data.statistics.totalInkUsed || { cyan: 0, magenta: 0, yellow: 0, black: 0 },
+            maintenanceCycles: data.statistics.maintenanceCycles || 0,
+            totalErrors: data.statistics.totalErrors || 0,
+            averageJobSize: data.statistics.averageJobSize || 0,
+            successRate: data.statistics.totalJobs > 0 
+              ? (data.statistics.successfulJobs / data.statistics.totalJobs) * 100 
+              : 100,
+          });
+        }
+      } catch (error) {
+        console.warn('[App] Poll failed:', error);
+      }
+    };
+
+    // Initial fetch
+    poll();
+    
+    // Fetch legacy statistics on initial load
+    api.getStatistics().then(setStats).catch(console.error);
+    
+    // Poll every 5 seconds (increased from 3 to reduce API calls)
+    pollInterval = setInterval(poll, 5000);
+
+    return () => {
+      console.log('[App] Cleaning up SSE and polling');
+      if (sseCleanup) sseCleanup();
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, []); // Empty dependency - only run once on mount
+
+  const getStatusColor = (printerStatus?: string) => {
+    switch (printerStatus) {
       case 'ready':
-        return 'green';
+        return 'success';
       case 'printing':
-        return 'blue';
+        return 'accent';
       case 'error':
-        return 'red';
+        return 'danger';
       case 'paused':
       case 'warming_up':
-        return 'orange';
+        return 'attention';
       case 'offline':
-        return 'gray';
+        return 'fg';
       default:
-        return 'gray';
+        return 'fg';
     }
   };
 
-  return (
-    <Box minH="100vh" bg={colorMode === 'dark' ? 'black' : '#f5f5f7'}>
-      {/* Navbar with glassmorphism */}
-      <Box
-        position="sticky"
-        top="0"
-        zIndex="100"
-        bg={colorMode === 'dark' ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)'}
-        backdropFilter="blur(20px)"
-        borderBottom="1px solid"
-        borderColor={colorMode === 'dark' ? 'whiteAlpha.100' : 'blackAlpha.50'}
-        mb={8}
-      >
-        <Container maxW="container.xl" py={4}>
-          <Flex justify="space-between" align="center">
-            <Flex align="center" gap={3}>
-              <Box
-                fontSize="2xl"
-                bgGradient="linear(to-r, apple.blue, purple.500)"
-                bgClip="text"
-                fontWeight="bold"
-              >
-                
-              </Box>
-              <Box>
-                <Heading size="md" fontWeight="600" letterSpacing="-0.5px">
-                  Virtual Printer
-                </Heading>
-              </Box>
-            </Flex>
+  const statusColorScheme = getStatusColor(status?.status);
 
-            <Flex align="center" gap={4}>
-              <Badge
-                colorScheme={getStatusColor(status?.status)}
-                variant="subtle"
-                fontSize="xs"
-                px={3}
-                py={1.5}
-                borderRadius="full"
-                textTransform="capitalize"
-                letterSpacing="wide"
-              >
-                ● {status?.status || 'Initializing...'}
-              </Badge>
-              <IconButton
-                aria-label="Toggle color mode"
-                icon={colorMode === 'dark' ? <SunIcon /> : <MoonIcon />}
-                onClick={toggleColorMode}
-                variant="ghost"
-                size="sm"
-                borderRadius="full"
-              />
-            </Flex>
+  return (
+    <Box minH="100vh" bg={canvasBg}>
+      {/* GitHub-style Header */}
+      <Box
+        as="header"
+        bg={headerBg}
+        borderBottom="1px solid"
+        borderColor={borderColor}
+        position="sticky"
+        top={0}
+        zIndex={100}
+      >
+        <Container maxW="100%" px={4}>
+          <Flex h="62px" align="center" justify="space-between">
+            {/* Left section - Logo and Nav */}
+            <HStack spacing={4}>
+              {/* Logo */}
+              <HStack spacing={2} cursor="pointer" onClick={() => setSidebarVisible(!sidebarVisible)}>
+                <Icon as={FiPrinter} boxSize={8} color={useColorModeValue('fgLight.default', 'fg.default')} />
+              </HStack>
+
+              {/* Repo-style breadcrumb - shows selected printer */}
+              <HStack spacing={1} fontSize="sm">
+                <Text fontWeight="semibold" color={useColorModeValue('accent.emphasis', 'accent.fg')}>
+                  virtual-printer
+                </Text>
+                <Text color={mutedText}>/</Text>
+                <Text fontWeight="semibold">
+                  {status?.name || 'MCP Printer'}
+                </Text>
+                {status?.type && (
+                  <>
+                    <Text color={mutedText}>·</Text>
+                    <Text color={mutedText} fontSize="xs">
+                      {status.type.model}
+                    </Text>
+                  </>
+                )}
+              </HStack>
+
+              {/* Status indicator */}
+              <Tooltip label={`Printer is ${status?.status || 'initializing'}`}>
+                <Box
+                  px={2}
+                  py={1}
+                  borderRadius="full"
+                  bg={`${statusColorScheme}.subtle`}
+                  border="1px solid"
+                  borderColor={`${statusColorScheme}.muted`}
+                  display="flex"
+                  alignItems="center"
+                  gap={1.5}
+                >
+                  <Box
+                    w={2}
+                    h={2}
+                    borderRadius="full"
+                    bg={`${statusColorScheme}.fg`}
+                    animation={status?.status === 'printing' ? 'pulse 2s infinite' : undefined}
+                  />
+                  <Text fontSize="xs" fontWeight="medium" color={`${statusColorScheme}.fg`} textTransform="capitalize">
+                    {status?.status || 'Initializing'}
+                  </Text>
+                </Box>
+              </Tooltip>
+            </HStack>
+
+            {/* Right section - Actions */}
+            <HStack spacing={2}>
+              <Tooltip label="Notifications">
+                <IconButton
+                  aria-label="Notifications"
+                  icon={<FiBell />}
+                  variant="ghost"
+                  size="sm"
+                />
+              </Tooltip>
+              <Tooltip label={`Switch to ${colorMode === 'dark' ? 'light' : 'dark'} mode`}>
+                <IconButton
+                  aria-label="Toggle color mode"
+                  icon={colorMode === 'dark' ? <SunIcon /> : <MoonIcon />}
+                  onClick={toggleColorMode}
+                  variant="ghost"
+                  size="sm"
+                />
+              </Tooltip>
+              <Tooltip label="Settings">
+                <IconButton
+                  aria-label="Settings"
+                  icon={<FiSettings />}
+                  variant="ghost"
+                  size="sm"
+                />
+              </Tooltip>
+            </HStack>
           </Flex>
+        </Container>
+
+        {/* Sub-navigation tabs */}
+        <Container maxW="100%" px={4}>
+          <Tabs index={activeTab} onChange={setActiveTab} variant="line">
+            <TabList borderBottom="none">
+              <Tab>
+                <HStack spacing={2}>
+                  <Icon as={FiGitBranch} boxSize={4} />
+                  <Text>Dashboard</Text>
+                </HStack>
+              </Tab>
+              <Tab>
+                <HStack spacing={2}>
+                  <Icon as={FiPrinter} boxSize={4} />
+                  <Text>Print Jobs</Text>
+                  {status?.queue?.length ? (
+                    <Box
+                      px={1.5}
+                      py={0.5}
+                      borderRadius="full"
+                      bg={useColorModeValue('fgLight.muted', 'fg.muted')}
+                      color={useColorModeValue('canvasLight.default', 'canvas.default')}
+                      fontSize="xs"
+                      fontWeight="semibold"
+                      minW="20px"
+                      textAlign="center"
+                    >
+                      {status.queue.length}
+                    </Box>
+                  ) : null}
+                </HStack>
+              </Tab>
+              <Tab>
+                <HStack spacing={2}>
+                  <Icon as={FiActivity} boxSize={4} />
+                  <Text>Activity</Text>
+                </HStack>
+              </Tab>
+            </TabList>
+          </Tabs>
         </Container>
       </Box>
 
-      <Container maxW="container.xl" pb={12}>
-        <Grid
-          templateColumns={{ base: '1fr', lg: 'repeat(12, 1fr)' }}
-          gap={6}
-          autoRows="minmax(180px, auto)"
-        >
-          {/* Status Panel - Large Hero Card */}
-          <GridItem colSpan={{ base: 12, lg: 8 }} rowSpan={2}>
-            <StatusPanel status={status} />
-          </GridItem>
+      {/* Main Content Area */}
+      <Flex>
+        {/* Sidebar */}
+        {sidebarVisible && (
+          <Sidebar
+            currentPrinter={status?.name}
+            selectedPrinterId={selectedPrinterId}
+            onSelectPrinter={handleSelectPrinter}
+            currentLocationId={currentLocationId}
+            onSelectLocation={handleSelectLocation}
+            onNavigate={(section) => {
+              if (section === 'dashboard') setActiveTab(0);
+              else if (section === 'jobs') setActiveTab(1);
+              else if (section === 'activity') setActiveTab(2);
+            }}
+          />
+        )}
 
-          {/* Quick Actions / Controls */}
-          <GridItem colSpan={{ base: 12, lg: 4 }} rowSpan={2}>
-            <ControlPanel
-              status={status?.status}
-              onPause={async () => {
-                const result = await api.pausePrinter();
-                showToast(result.message, result.success ? 'success' : 'error');
-              }}
-              onResume={async () => {
-                const result = await api.resumePrinter();
-                showToast(result.message, result.success ? 'success' : 'error');
-              }}
-              onPowerCycle={async () => {
-                if (confirm('Power cycle the printer? This will take about 15 seconds.')) {
-                  const result = await api.powerCycle();
-                  showToast(result.message, result.success ? 'success' : 'error');
-                }
-              }}
-              onReset={async () => {
-                if (confirm('Reset printer to factory defaults?')) {
-                  const result = await api.resetPrinter();
-                  showToast(result.message, result.success ? 'success' : 'error');
-                  setTimeout(() => api.getStatistics().then(setStats), 1000);
-                }
-              }}
-              onCleanHeads={async () => {
-                const result = await api.cleanHeads();
-                showToast(result.message, result.success ? 'success' : 'error');
-              }}
-              onAlignHeads={async () => {
-                const result = await api.alignHeads();
-                showToast(result.message, result.success ? 'success' : 'error');
-              }}
-              onNozzleCheck={async () => {
-                const result = await api.nozzleCheck();
-                showToast(result.message, result.success ? 'success' : 'error');
-              }}
-              onClearJam={async () => {
-                const result = await api.clearJam();
-                showToast(result.message, result.success ? 'success' : 'error');
-              }}
-            />
-          </GridItem>
+        {/* Main Content */}
+        <Box flex={1} p={6} overflowY="auto">
+          {activeTab === 0 && (
+            <Grid
+              templateColumns={{ base: '1fr', lg: 'repeat(12, 1fr)' }}
+              gap={4}
+            >
+              {/* Main status area */}
+              <GridItem colSpan={{ base: 12, lg: 8 }}>
+                <StatusPanel status={status} />
+              </GridItem>
 
-          {/* Resources Row */}
-          <GridItem colSpan={{ base: 12, md: 6, lg: 4 }}>
-            <InkLevels
-              inkLevels={status?.inkLevels}
-              onRefill={async (color) => {
-                const result = await api.refillInk(color);
-                showToast(result.message, result.success ? 'success' : 'error');
-              }}
-              onSetLevel={async (color, level) => {
-                const result = await api.setInkLevel(color, level);
-                showToast(result.message, result.success ? 'success' : 'error');
-              }}
-            />
-          </GridItem>
+              {/* Quick stats */}
+              <GridItem colSpan={{ base: 12, lg: 4 }}>
+                <StatsPanel stats={stats} />
+              </GridItem>
 
-          <GridItem colSpan={{ base: 12, md: 6, lg: 4 }}>
-            <PaperTray
-              paper={status?.paper}
-              onLoadPaper={async (count, size) => {
-                const result = await api.loadPaper(count, size);
-                showToast(result.message, result.success ? 'success' : 'error');
-              }}
-              onSetPaperCount={async (count, size) => {
-                const result = await api.setPaperCount(count, size);
-                showToast(result.message, result.success ? 'success' : 'error');
-              }}
-            />
-          </GridItem>
+              {/* Resources row */}
+              <GridItem colSpan={{ base: 12, md: 6, lg: 4 }}>
+                <InkLevels
+                  inkLevels={status?.inkLevels}
+                  inkStatus={status?.inkStatus}
+                  onRefill={async (color) => {
+                    const result = await api.refillInk(color);
+                    showToast(result.message, result.success ? 'success' : 'error');
+                  }}
+                  onSetLevel={async (color, level) => {
+                    const result = await api.setInkLevel(color, level);
+                    showToast(result.message, result.success ? 'success' : 'error');
+                  }}
+                />
+              </GridItem>
 
-          <GridItem colSpan={{ base: 12, lg: 4 }}>
-            <StatsPanel stats={stats} />
-          </GridItem>
+              <GridItem colSpan={{ base: 12, md: 6, lg: 4 }}>
+                <PaperTray
+                  paper={status?.paper}
+                  onLoadPaper={async (count, size) => {
+                    const result = await api.loadPaper(count, size);
+                    showToast(result.message, result.success ? 'success' : 'error');
+                  }}
+                  onSetPaperCount={async (count, size) => {
+                    const result = await api.setPaperCount(count, size);
+                    showToast(result.message, result.success ? 'success' : 'error');
+                  }}
+                />
+              </GridItem>
 
-          {/* Bottom Row */}
-          <GridItem colSpan={{ base: 12, lg: 8 }}>
-            <PrintQueue
-              queue={status?.queue}
-              onCancelJob={async (jobId) => {
-                const result = await api.cancelJob(jobId);
-                showToast(result.message, result.success ? 'success' : 'error');
-              }}
-            />
-          </GridItem>
+              <GridItem colSpan={{ base: 12, lg: 4 }}>
+                <ControlPanel
+                  status={status?.status}
+                  onPause={async () => {
+                    const result = await api.pausePrinter();
+                    showToast(result.message, result.success ? 'success' : 'error');
+                  }}
+                  onResume={async () => {
+                    const result = await api.resumePrinter();
+                    showToast(result.message, result.success ? 'success' : 'error');
+                  }}
+                  onPowerCycle={async () => {
+                    if (confirm('Power cycle the printer? This will take about 15 seconds.')) {
+                      const result = await api.powerCycle();
+                      showToast(result.message, result.success ? 'success' : 'error');
+                    }
+                  }}
+                  onReset={async () => {
+                    if (confirm('Reset printer to factory defaults?')) {
+                      const result = await api.resetPrinter();
+                      showToast(result.message, result.success ? 'success' : 'error');
+                      setTimeout(() => api.getStatistics().then(setStats), 1000);
+                    }
+                  }}
+                  onCleanHeads={async () => {
+                    const result = await api.cleanHeads();
+                    showToast(result.message, result.success ? 'success' : 'error');
+                  }}
+                  onAlignHeads={async () => {
+                    const result = await api.alignHeads();
+                    showToast(result.message, result.success ? 'success' : 'error');
+                  }}
+                  onNozzleCheck={async () => {
+                    const result = await api.nozzleCheck();
+                    showToast(result.message, result.success ? 'success' : 'error');
+                  }}
+                  onClearJam={async () => {
+                    const result = await api.clearJam();
+                    showToast(result.message, result.success ? 'success' : 'error');
+                  }}
+                />
+              </GridItem>
 
-          <GridItem colSpan={{ base: 12, lg: 4 }}>
-            <PrintForm
-              onSubmit={async (data) => {
-                try {
-                  const result = await api.printDocument(data);
-                  if (result.success) {
-                    showToast(`Print job submitted!`, 'success');
-                  } else {
-                    showToast(`Error: ${result.error}`, 'error');
-                  }
-                } catch (error) {
-                  showToast(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
-                }
-              }}
-            />
-          </GridItem>
+              {/* Print Form */}
+              <GridItem colSpan={{ base: 12, lg: 4 }}>
+                <PrintForm
+                  onSubmit={async (data) => {
+                    try {
+                      const result = await api.printDocument(data);
+                      if (result.success) {
+                        showToast(`Print job submitted!`, 'success');
+                      } else {
+                        showToast(`Error: ${result.error}`, 'error');
+                      }
+                    } catch (error) {
+                      showToast(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+                    }
+                  }}
+                />
+              </GridItem>
 
-          <GridItem colSpan={12}>
-            <EventLog />
-          </GridItem>
-        </Grid>
-      </Container>
+              {/* Queue preview */}
+              <GridItem colSpan={{ base: 12, lg: 8 }}>
+                <PrintQueue
+                  queue={status?.queue}
+                  onCancelJob={async (jobId) => {
+                    const result = await api.cancelJob(jobId);
+                    showToast(result.message, result.success ? 'success' : 'error');
+                  }}
+                />
+              </GridItem>
+            </Grid>
+          )}
+
+          {activeTab === 1 && (
+            <Grid templateColumns={{ base: '1fr', lg: 'repeat(12, 1fr)' }} gap={4}>
+              <GridItem colSpan={{ base: 12, lg: 8 }}>
+                <PrintQueue
+                  queue={status?.queue}
+                  onCancelJob={async (jobId) => {
+                    const result = await api.cancelJob(jobId);
+                    showToast(result.message, result.success ? 'success' : 'error');
+                  }}
+                />
+              </GridItem>
+              <GridItem colSpan={{ base: 12, lg: 4 }}>
+                <PrintForm
+                  onSubmit={async (data) => {
+                    try {
+                      const result = await api.printDocument(data);
+                      if (result.success) {
+                        showToast(`Print job submitted!`, 'success');
+                      } else {
+                        showToast(`Error: ${result.error}`, 'error');
+                      }
+                    } catch (error) {
+                      showToast(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+                    }
+                  }}
+                />
+              </GridItem>
+            </Grid>
+          )}
+
+          {activeTab === 2 && (
+            <Grid templateColumns={{ base: '1fr' }} gap={4}>
+              <GridItem>
+                <EventLog />
+              </GridItem>
+            </Grid>
+          )}
+        </Box>
+      </Flex>
+
+      {/* CSS for pulse animation */}
+      <style>
+        {`
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+          }
+        `}
+      </style>
     </Box>
   );
 }

@@ -8,12 +8,14 @@ import express from 'express';
 import path from 'path';
 import { VirtualPrinter } from './printer.js';
 import { StateManager } from './state-manager.js';
+import { getMultiPrinterManager } from './multi-printer-manager.js';
 
 const PORT = 3001;
 
 // Initialize printer (shared state with MCP server if needed)
 const stateManager = new StateManager();
 const printer = new VirtualPrinter(stateManager);
+const multiPrinterManager = getMultiPrinterManager();
 
 // Create Express app
 const app = express();
@@ -34,9 +36,138 @@ app.use(express.static(path.join(__dirname, '../public-react')));
 
 // API Endpoints
 
-// Get current status
-app.get('/api/status', (req, res) => {
+// Get current status (supports multi-printer with ?printerId=xxx)
+app.get('/api/status', async (req, res) => {
   try {
+    const printerId = req.query.printerId as string | undefined;
+    
+    // Multi-printer mode: get status for specific printer
+    if (printerId) {
+      console.log(`[StatusAPI] Fetching status for printer: ${printerId}`);
+      
+      await multiPrinterManager.initialize();
+      
+      // Debug: list all printers
+      const allPrinters = await multiPrinterManager.getAllPrinters();
+      console.log(`[StatusAPI] Available printers:`, allPrinters.map(p => ({ id: p.id, name: p.name })));
+      
+      const printerInstance = await multiPrinterManager.getPrinter(printerId);
+      console.log(`[StatusAPI] getPrinter result:`, printerInstance ? { id: printerInstance.id, name: printerInstance.name } : 'null');
+      
+      if (!printerInstance) {
+        console.log(`[StatusAPI] Printer not found: ${printerId}`);
+        return res.status(404).json({
+          error: 'Printer not found',
+          printerId,
+          availablePrinters: allPrinters.map(p => ({ id: p.id, name: p.name })),
+        });
+      }
+      
+      // Convert PrinterInstance to PrinterStatus format
+      const printerType = multiPrinterManager.getPrinterType(printerInstance.typeId);
+      
+      // Calculate ink status
+      const inkStatus = {
+        depleted: [] as string[],
+        low: [] as string[],
+      };
+      
+      if (printerInstance.inkLevels) {
+        for (const [color, level] of Object.entries(printerInstance.inkLevels)) {
+          if ((level as number) <= 0) {
+            inkStatus.depleted.push(color);
+          } else if ((level as number) <= 15) {
+            inkStatus.low.push(color);
+          }
+        }
+      }
+      
+      // Calculate issues
+      const issues: string[] = [];
+      const canPrint = printerInstance.status === 'ready' && 
+                       printerInstance.paperCount > 0 && 
+                       inkStatus.depleted.length === 0;
+      
+      if (printerInstance.paperCount === 0) {
+        issues.push('Out of paper');
+      } else if (printerInstance.paperCount < 10) {
+        issues.push('Low paper');
+      }
+      
+      if (inkStatus.depleted.length > 0) {
+        issues.push(`Ink depleted: ${inkStatus.depleted.join(', ')}`);
+      } else if (inkStatus.low.length > 0) {
+        issues.push(`Low ink: ${inkStatus.low.join(', ')}`);
+      }
+      
+      // Determine operational status
+      let operationalStatus: 'ready' | 'not_ready' | 'error' = 'not_ready';
+      if (printerInstance.status === 'error') {
+        operationalStatus = 'error';
+      } else if (canPrint) {
+        operationalStatus = 'ready';
+      }
+      
+      // Format queue
+      const queue = {
+        length: printerInstance.queue?.length || 0,
+        jobs: (printerInstance.queue || []).map((job: any) => ({
+          id: job.id,
+          document: job.documentName || job.document,
+          pages: job.pages || 1,
+          status: job.status,
+          progress: job.progress,
+        })),
+      };
+      
+      // Calculate uptime
+      const uptimeSeconds = printerInstance.lastStartTime 
+        ? Math.floor((Date.now() - printerInstance.lastStartTime) / 1000)
+        : 0;
+      
+      const status = {
+        id: printerInstance.id,
+        name: printerInstance.name,
+        typeId: printerInstance.typeId,
+        type: printerType ? {
+          brand: printerType.brand,
+          model: printerType.model,
+          category: printerType.category,
+          inkSystem: printerType.inkSystem,
+          icon: printerType.icon,
+        } : null,
+        status: printerInstance.status || 'initializing',
+        operationalStatus,
+        canPrint,
+        issues,
+        inkLevels: printerInstance.inkLevels || { cyan: 0, magenta: 0, yellow: 0, black: 0 },
+        inkStatus,
+        paper: {
+          count: printerInstance.paperCount || 0,
+          capacity: printerInstance.paperTrayCapacity || 100,
+          size: printerInstance.paperSize || 'A4',
+        },
+        currentJob: printerInstance.currentJob || null,
+        queue,
+        errors: printerInstance.errors || [],
+        uptimeSeconds,
+        maintenanceNeeded: printerInstance.statistics?.lastMaintenanceDate 
+          ? (Date.now() - printerInstance.statistics.lastMaintenanceDate) > (30 * 24 * 60 * 60 * 1000)
+          : false,
+        statistics: printerInstance.statistics || null,
+        locationId: printerInstance.locationId,
+      };
+      
+      console.log('[StatusAPI] Multi-printer status retrieved:', {
+        printerId: status.id,
+        name: status.name,
+        status: status.status,
+      });
+      
+      return res.json(status);
+    }
+    
+    // Legacy single-printer mode
     const status = printer.getStatus();
     res.json(status);
   } catch (error) {
@@ -364,6 +495,150 @@ app.post('/api/reset', (req, res) => {
     const message = printer.reset();
     res.json({ success: true, message });
   } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+// Get info (statistics or logs)
+app.get('/api/info', (req, res) => {
+  try {
+    const type = req.query.type as string;
+    
+    if (type === 'statistics') {
+      const stats = printer.getStatistics();
+      res.json(stats);
+    } else if (type === 'logs') {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const logs = printer.getLogs(limit).map(log => ({
+        timestamp: log.timestamp,
+        level: log.level,
+        message: log.message
+      }));
+      res.json({ logs });
+    } else {
+      res.json({
+        name: 'Virtual Printer',
+        version: '1.0.0',
+        status: printer.getStatus().status
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+// Multi-Printer API - Get all printers
+app.get('/api/printers', async (req, res) => {
+  try {
+    const [printers, locations, summary] = await Promise.all([
+      multiPrinterManager.getAllPrinters(),
+      multiPrinterManager.getAllLocations(),
+      multiPrinterManager.getStateSummary(),
+    ]);
+
+    const printerTypes = multiPrinterManager.getAvailablePrinterTypes();
+
+    // Enhance printers with type info
+    const enrichedPrinters = printers.map(printer => {
+      const type = multiPrinterManager.getPrinterType(printer.typeId);
+      return {
+        ...printer,
+        type: type ? {
+          brand: type.brand,
+          model: type.model,
+          category: type.category,
+          inkSystem: type.inkSystem,
+          icon: type.icon,
+          features: type.features,
+        } : null,
+      };
+    });
+
+    // Group printers by location
+    const printersByLocation: Record<string, typeof enrichedPrinters> = {};
+    const unassignedPrinters: typeof enrichedPrinters = [];
+
+    for (const p of enrichedPrinters) {
+      if (p.locationId) {
+        if (!printersByLocation[p.locationId]) {
+          printersByLocation[p.locationId] = [];
+        }
+        printersByLocation[p.locationId].push(p);
+      } else {
+        unassignedPrinters.push(p);
+      }
+    }
+
+    res.json({
+      success: true,
+      printers: enrichedPrinters,
+      locations,
+      printersByLocation,
+      unassignedPrinters,
+      summary,
+      availableTypes: printerTypes.map(t => ({
+        id: t.id,
+        brand: t.brand,
+        model: t.model,
+        category: t.category,
+        inkSystem: t.inkSystem,
+        icon: t.icon,
+        description: t.description,
+      })),
+    });
+  } catch (error) {
+    console.error('Error getting printers:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+// Multi-Printer API - Add a new printer
+app.post('/api/printers', async (req, res) => {
+  try {
+    const { name, typeId, locationId } = req.body;
+
+    if (!name || !typeId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Name and typeId are required',
+      });
+    }
+
+    const printerType = multiPrinterManager.getPrinterType(typeId);
+    if (!printerType) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid printer type: ${typeId}`,
+      });
+    }
+
+    const newPrinter = await multiPrinterManager.addPrinter(name, typeId, locationId);
+
+    res.status(201).json({
+      success: true,
+      printer: {
+        ...newPrinter,
+        type: {
+          brand: printerType.brand,
+          model: printerType.model,
+          category: printerType.category,
+          inkSystem: printerType.inkSystem,
+          icon: printerType.icon,
+        },
+      },
+      message: `Printer "${name}" created successfully`,
+    });
+  } catch (error) {
+    console.error('Error adding printer:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : String(error)
