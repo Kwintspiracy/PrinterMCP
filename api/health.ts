@@ -4,7 +4,7 @@
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { StateManager } from '../build/state-manager.js';
+import { loadStateManager } from './_lib';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -21,6 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    const StateManager = await loadStateManager();
     const stateManager = new StateManager();
     const storageType = await stateManager.getStorageType();
     const storageHealthy = await stateManager.healthCheck();

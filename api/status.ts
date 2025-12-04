@@ -5,27 +5,28 @@
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { VirtualPrinter } from '../build/printer.js';
-import { StateManager } from '../build/state-manager.js';
-import { getMultiPrinterManager } from '../build/multi-printer-manager.js';
+import { loadPrinter, loadStateManager, loadMultiPrinterManager, type VirtualPrinter } from './_lib';
 
 // Initialize single printer (legacy mode)
 let printerInstance: VirtualPrinter | null = null;
 
-async function getPrinter() {
+async function getPrinter(): Promise<VirtualPrinter> {
   if (!printerInstance) {
+    const StateManager = await loadStateManager();
+    const VirtualPrinter = await loadPrinter();
     const stateManager = new StateManager();
     printerInstance = new VirtualPrinter(stateManager);
   }
   // Always reload state from storage to get latest updates
-  await printerInstance.reloadState();
-  return printerInstance;
+  await printerInstance!.reloadState();
+  return printerInstance!;
 }
 
 /**
  * Convert PrinterInstance from MultiPrinterManager to PrinterStatus format
  */
-function convertToPrinterStatus(printer: any) {
+async function convertToPrinterStatus(printer: any) {
+  const getMultiPrinterManager = await loadMultiPrinterManager();
   const manager = getMultiPrinterManager();
   const printerType = manager.getPrinterType(printer.typeId);
   
@@ -148,6 +149,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (printerId) {
       console.log(`[StatusAPI] Fetching status for printer: ${printerId}`);
       
+      const getMultiPrinterManager = await loadMultiPrinterManager();
       const manager = getMultiPrinterManager();
       await manager.initialize();
       
@@ -160,7 +162,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
       
-      const status = convertToPrinterStatus(printer);
+      const status = await convertToPrinterStatus(printer);
       
       console.log('[StatusAPI] Multi-printer status retrieved:', {
         printerId: status.id,

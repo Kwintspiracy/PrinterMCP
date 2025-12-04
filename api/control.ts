@@ -6,19 +6,20 @@
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { VirtualPrinter } from '../build/printer.js';
-import { StateManager } from '../build/state-manager.js';
+import { loadPrinter, loadStateManager, type VirtualPrinter } from './_lib';
 
 let printerInstance: VirtualPrinter | null = null;
 
-async function getPrinter() {
+async function getPrinter(): Promise<VirtualPrinter> {
   if (!printerInstance) {
+    const StateManager = await loadStateManager();
+    const VirtualPrinter = await loadPrinter();
     const stateManager = new StateManager();
     printerInstance = new VirtualPrinter(stateManager);
   }
   // Always reload state from storage to get latest updates
-  await printerInstance.reloadState();
-  return printerInstance;
+  await printerInstance!.reloadState();
+  return printerInstance!;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -87,6 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         
         // Directly manipulate state
+        const StateManager = await loadStateManager();
         const stateManager = new StateManager();
         const state = await stateManager.loadState();
         if (!state.inkLevels) {
