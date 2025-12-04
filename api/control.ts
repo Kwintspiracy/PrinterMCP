@@ -1,6 +1,8 @@
 /**
  * Vercel Serverless Function: Printer Control Operations
  * POST /api/control
+ * 
+ * Absorbs: set-ink/[color].ts functionality via set_ink action
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
@@ -67,6 +69,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         result = printer.refillInk(params.color);
         break;
 
+      case 'set_ink': {
+        // Set specific ink level (from set-ink/[color].ts)
+        const validColors = ['cyan', 'magenta', 'yellow', 'black'];
+        if (!params.color || !validColors.includes(params.color)) {
+          return res.status(400).json({ 
+            error: 'Invalid or missing color parameter',
+            validColors 
+          });
+        }
+        if (params.level === undefined || params.level === null) {
+          return res.status(400).json({ error: 'Missing level parameter (0-100)' });
+        }
+        const levelNum = Number(params.level);
+        if (isNaN(levelNum) || levelNum < 0 || levelNum > 100) {
+          return res.status(400).json({ error: 'level must be a number between 0 and 100' });
+        }
+        
+        // Directly manipulate state
+        const stateManager = new StateManager();
+        const state = await stateManager.loadState();
+        if (!state.inkLevels) {
+          state.inkLevels = { cyan: 100, magenta: 100, yellow: 100, black: 100 };
+        }
+        state.inkLevels[params.color as keyof typeof state.inkLevels] = levelNum;
+        state.lastUpdated = Date.now();
+        await stateManager.saveState(state);
+        
+        const colorLabel = params.color.charAt(0).toUpperCase() + params.color.slice(1);
+        return res.status(200).json({ 
+          success: true,
+          message: `${colorLabel} ink set to ${levelNum}%`,
+          level: levelNum,
+          color: params.color
+        });
+      }
+
       case 'load_paper':
         if (!params.count) {
           return res.status(400).json({ error: 'Missing count parameter' });
@@ -109,7 +147,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ 
           error: `Unknown action: ${action}`,
           availableActions: [
-            'pause', 'resume', 'cancel_job', 'refill_ink', 'load_paper', 'set_paper_count',
+            'pause', 'resume', 'cancel_job', 'refill_ink', 'set_ink', 'load_paper', 'set_paper_count',
             'clean_print_heads', 'align_print_heads', 'run_nozzle_check',
             'clear_paper_jam', 'power_cycle', 'reset'
           ]

@@ -336,7 +336,7 @@ export const api = {
   },
 
   async cancelJob(jobId: string) {
-    const response = await fetch(`${API_BASE}/cancel/${jobId}`, {
+    const response = await fetch(`${API_BASE}/queue?action=cancel&jobId=${encodeURIComponent(jobId)}`, {
       method: 'POST',
     });
     return response.json();
@@ -360,10 +360,10 @@ export const api = {
   },
 
   async setInkLevel(color: string, level: number) {
-    const response = await fetch(`${API_BASE}/set-ink/${color}`, {
+    const response = await fetch(`${API_BASE}/control`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ level }),
+      body: JSON.stringify({ action: 'set_ink', color, level }),
     });
     return response.json();
   },
@@ -492,10 +492,10 @@ export const api = {
     }
   },
 
-  // Location API methods
+  // Location API methods (consolidated into /api/settings?type=locations)
   async getLocations(): Promise<LocationsResponse> {
     try {
-      const response = await fetch(`${API_BASE}/locations`);
+      const response = await fetch(`${API_BASE}/settings?type=locations`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return await response.json();
     } catch (error) {
@@ -506,7 +506,7 @@ export const api = {
 
   async setLocationDefaultPrinter(locationId: string, printerId: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const response = await fetch(`${API_BASE}/locations`, {
+      const response = await fetch(`${API_BASE}/settings?type=locations`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ locationId, defaultPrinterId: printerId }),
@@ -518,10 +518,10 @@ export const api = {
     }
   },
 
-  // User Settings API methods
+  // User Settings API methods (consolidated into /api/settings?type=user)
   async getUserSettings(): Promise<UserSettingsResponse> {
     try {
-      const response = await fetch(`${API_BASE}/user-settings`);
+      const response = await fetch(`${API_BASE}/settings?type=user`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return await response.json();
     } catch (error) {
@@ -535,7 +535,7 @@ export const api = {
 
   async setCurrentLocation(locationId: string): Promise<UserSettingsResponse> {
     try {
-      const response = await fetch(`${API_BASE}/user-settings`, {
+      const response = await fetch(`${API_BASE}/settings?type=user`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentLocationId: locationId }),
