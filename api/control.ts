@@ -316,29 +316,26 @@ async function updatePrinterState(
   updates: Record<string, any>
 ): Promise<boolean> {
   try {
-    // Access the internal state directly since MultiPrinterManager doesn't have 
-    // a dedicated updatePrinterState method, we'll do it manually
-    const state = (manager as any).state;
-    if (!state || !state.printers[printerId]) {
+    // Get the printer and update it
+    const printer = await manager.getPrinter(printerId);
+    if (!printer) {
+      console.warn(`[ControlAPI] Printer ${printerId} not found`);
       return false;
     }
 
-    Object.assign(state.printers[printerId], updates, { lastUpdated: Date.now() });
+    // Apply updates
+    Object.assign(printer, updates, { lastUpdated: Date.now() });
 
-    // Save state
-    state.version++;
-    state.lastUpdated = Date.now();
+    // Save using manager's savePrinter method (handles normalized vs blob storage)
+    const success = await (manager as any).savePrinter?.(printer);
 
-    const storage = (manager as any).storage;
-    if (storage && typeof storage.saveState === 'function') {
-      console.log(`[ControlAPI] Saving state to storage (${storage.getType()})...`);
-      await storage.saveState(state, 'multi-printer-state');
-      console.log('[ControlAPI] State saved successfully');
+    if (success) {
+      console.log(`[ControlAPI] Successfully saved printer ${printerId}`);
     } else {
-      console.warn('[ControlAPI] Storage not available or invalid, state not saved');
+      console.warn(`[ControlAPI] Failed to save printer ${printerId}`);
     }
 
-    return true;
+    return success !== false; // If savePrinter doesn't exist, assume success
   } catch (error) {
     console.error('[ControlAPI] Error updating printer state:', error);
     return false;

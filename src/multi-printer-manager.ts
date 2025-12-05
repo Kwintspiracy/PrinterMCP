@@ -61,15 +61,57 @@ export class MultiPrinterManager {
   }
 
   /**
+   * Check if storage is using normalized schema
+   */
+  private isNormalizedStorage(): boolean {
+    return this.storage?.getType() === 'supabase-normalized';
+  }
+
+  /**
    * Load multi-printer state from storage
    */
   private async loadState(): Promise<MultiPrinterState> {
     try {
-      if (this.storage) {
-        console.log('[MultiPrinterManager] Loading state from storage...');
+      if (this.storage && this.isNormalizedStorage()) {
+        // Load from normalized storage (separate tables)
+        console.log('[MultiPrinterManager] Loading from normalized storage...');
+        const printers = await (this.storage as any).loadPrinters?.() || [];
+        const locations = await (this.storage as any).loadLocations?.() || [];
+
+        if (printers.length > 0 || locations.length > 0) {
+          console.log(`[MultiPrinterManager] Loaded ${printers.length} printers, ${locations.length} locations`);
+
+          // Build locations map and populate printerIds
+          const locationsMap: Record<string, PrinterLocation> = {};
+          locations.forEach((loc: PrinterLocation) => {
+            locationsMap[loc.id] = { ...loc, printerIds: [] };
+          });
+
+          // Build printers map and update location printerIds
+          const printersMap: Record<string, PrinterInstance> = {};
+          printers.forEach((printer: PrinterInstance) => {
+            printersMap[printer.id] = printer;
+            if (printer.locationId && locationsMap[printer.locationId]) {
+              locationsMap[printer.locationId].printerIds.push(printer.id);
+            }
+          });
+
+          return {
+            printers: printersMap,
+            locations: locationsMap,
+            defaultPrinterId: printers[0]?.id,
+            lastSelectedPrinterId: printers[0]?.id,
+            version: 1,
+            lastUpdated: Date.now(),
+          };
+        }
+        console.log('[MultiPrinterManager] No data in normalized storage, creating defaults');
+      } else if (this.storage) {
+        // Load from blob storage (old format)
+        console.log('[MultiPrinterManager] Loading state from blob storage...');
         const raw = await (this.storage as any).loadState?.(MULTI_PRINTER_STATE_KEY);
         if (raw && typeof raw === 'object' && 'printers' in raw) {
-          console.log('[MultiPrinterManager] Loaded state from storage');
+          console.log('[MultiPrinterManager] Loaded state from blob storage');
           return raw as MultiPrinterState;
         }
         console.log('[MultiPrinterManager] No existing state in storage, creating default');
@@ -84,24 +126,66 @@ export class MultiPrinterManager {
 
     // Save the default state so IDs persist
     if (this.storage) {
-      console.log('[MultiPrinterManager] Persisting default state to storage...');
-      try {
-        // We need to set this.state temporarily for saveState to work if it uses it, 
-        // or just call storage directly. 
-        // Looking at saveState(), it uses this.state.
-        // So let's use the storage adapter directly to avoid side effects during load
-        await (this.storage as any).saveState?.(defaultState, MULTI_PRINTER_STATE_KEY);
-        console.log('[MultiPrinterManager] Default state persisted');
-      } catch (error) {
-        console.warn('[MultiPrinterManager] Failed to persist default state:', error);
-      }
+      await this.saveDefaultState(defaultState);
     }
 
     return defaultState;
   }
 
   /**
-   * Save state to storage
+   * Save default state on first initialization
+   */
+  private async saveDefaultState(state: MultiPrinterState): Promise<void> {
+    console.log('[MultiPrinterManager] Persisting default state to storage...');
+    try {
+      if (this.isNormalizedStorage()) {
+        // Save to normalized storage
+        const savePromises: Promise<void>[] = [];
+
+        // Save all locations
+        for (const location of Object.values(state.locations)) {
+          savePromises.push((this.storage as any).saveLocation?.(location));
+        }
+
+        // Save all printers
+        for (const printer of Object.values(state.printers)) {
+          savePromises.push((this.storage as any).savePrinter?.(printer));
+        }
+
+        await Promise.all(savePromises);
+        console.log('[MultiPrinterManager] Default state persisted to normalized storage');
+      } else {
+        // Save to blob storage
+        await (this.storage as any).saveState?.(state, MULTI_PRINTER_STATE_KEY);
+        console.log('[MultiPrinterManager] Default state persisted to blob storage');
+      }
+    } catch (error) {
+      console.warn('[MultiPrinterManager] Failed to persist default state:', error);
+    }
+  }
+
+  /**
+   * Save a single printer to storage (normalized)
+   */
+  private async savePrinter(printer: PrinterInstance): Promise<boolean> {
+    if (!this.storage) return false;
+
+    try {
+      if (this.isNormalizedStorage()) {
+        await (this.storage as any).savePrinter?.(printer);
+      } else {
+        // For blob storage, save entire state
+        return await this.saveState();
+      }
+      return true;
+    } catch (error) {
+      console.error(`Error saving printer ${printer.id}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Save state to storage (blob storage fallback)
    */
   private async saveState(): Promise<boolean> {
     if (!this.state || !this.storage) return false;
@@ -324,7 +408,7 @@ export class MultiPrinterManager {
       this.state!.locations[locationId].updatedAt = Date.now();
     }
 
-    await this.saveState();
+    await this.savePrinter(printer);
     return printer;
   }
 
@@ -340,7 +424,7 @@ export class MultiPrinterManager {
     printer.name = newName;
     printer.lastUpdated = Date.now();
 
-    await this.saveState();
+    await this.savePrinter(printer);
     return true;
   }
 
@@ -368,7 +452,7 @@ export class MultiPrinterManager {
     }
 
     printer.lastUpdated = Date.now();
-    await this.saveState();
+    await this.savePrinter(printer);
     return true;
   }
 
@@ -412,7 +496,7 @@ export class MultiPrinterManager {
     printer.settings = { ...printer.settings, ...settings };
     printer.lastUpdated = Date.now();
 
-    await this.saveState();
+    await this.savePrinter(printer);
     return true;
   }
 

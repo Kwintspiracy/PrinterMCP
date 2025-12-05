@@ -79,12 +79,22 @@ export async function createStorageAdapter(): Promise<IStorageAdapter> {
   const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY;
 
   if (supabaseUrl && supabaseKey) {
-    console.log('[StorageAdapter] Supabase credentials found, using Supabase storage');
+    console.log('[StorageAdapter] Supabase credentials found, using Supabase normalized storage');
     try {
-      const { SupabaseStorage } = await import('./supabase-storage.js');
-      return new SupabaseStorage();
+      const { SupabaseNormalizedStorage } = await import('./supabase-normalized-storage.js');
+      const storage = new SupabaseNormalizedStorage();
+
+      // Health check to verify tables exist
+      const isHealthy = await storage.healthCheck();
+      if (isHealthy) {
+        console.log('[StorageAdapter] Supabase normalized storage is healthy');
+        return storage as any; // Type cast since it has different methods
+      }
+      console.warn('[StorageAdapter] Supabase normalized storage health check failed, using in-memory');
+      return createInMemoryAdapter();
     } catch (error) {
-      console.warn('[StorageAdapter] Supabase storage failed to initialize, falling back to other methods:', error);
+      console.warn('[StorageAdapter] Supabase normalized storage failed to initialize, falling back:', error);
+      return createInMemoryAdapter();
     }
   }
 
