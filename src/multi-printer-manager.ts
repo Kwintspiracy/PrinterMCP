@@ -577,10 +577,20 @@ export class MultiPrinterManager {
   }
 }
 
-// Singleton instance
+// Singleton instance (disabled in serverless to ensure fresh state loading)
 let instance: MultiPrinterManager | null = null;
 
 export function getMultiPrinterManager(): MultiPrinterManager {
+  // In serverless environments (Vercel), always create a new instance
+  // to ensure state is reloaded from storage on every request
+  const isServerless = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
+
+  if (isServerless) {
+    // Always return a new instance in serverless to avoid stale cached state
+    return new MultiPrinterManager();
+  }
+
+  // In traditional server environments, use singleton pattern
   if (!instance) {
     instance = new MultiPrinterManager();
   }
