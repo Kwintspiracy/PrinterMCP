@@ -5,7 +5,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getMultiPrinterManager } from '../src/multi-printer-manager.js';
+import { loadMultiPrinterManager } from './_lib';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers
@@ -17,7 +17,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
+  const getMultiPrinterManager = await loadMultiPrinterManager();
   const manager = getMultiPrinterManager();
+  await manager.initialize();
 
   try {
     if (req.method === 'GET') {

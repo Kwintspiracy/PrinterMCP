@@ -129,7 +129,7 @@ export default function PaperTray({ paper, onLoadPaper, onSetPaperCount }: Paper
             <HStack spacing={2}>
               <NumberInput
                 size="sm"
-                min={1}
+                min={0}
                 max={500}
                 value={count}
                 onChange={(_, val) => setCount(val || 0)}

@@ -614,6 +614,13 @@ const theme = extendTheme({
       }),
     },
     Tabs: {
+      baseStyle: {
+        root: {},
+        tablist: {},
+        tab: {},
+        tabpanels: {},
+        tabpanel: {},
+      },
       variants: {
         line: (props: any) => ({
           tablist: {

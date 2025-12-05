@@ -5,13 +5,14 @@
  */
 
 import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
-// Helper to resolve module paths
+// Helper to resolve module paths - returns file:// URL for ESM compatibility on Windows
 function resolveModulePath(moduleName: string): string {
   // In Vercel, the build directory should be available
   const buildPath = join(process.cwd(), 'build', moduleName);
-  return buildPath;
+  // Convert to file:// URL for ESM compatibility on Windows
+  return pathToFileURL(buildPath).href;
 }
 
 // Export pre-configured imports

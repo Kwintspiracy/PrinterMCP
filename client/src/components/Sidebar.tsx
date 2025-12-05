@@ -62,6 +62,8 @@ export default function Sidebar({
   const selectedBg = useColorModeValue('accent.subtle', 'accent.subtle');
   const currentLocationBg = useColorModeValue('success.subtle', 'success.subtle');
   const mutedText = useColorModeValue('fgLight.muted', 'fg.muted');
+  const menuButtonBg = useColorModeValue('white', 'canvas.default');
+  const badgeCountBg = useColorModeValue('canvasLight.inset', 'canvas.inset');
 
   const loadPrinters = async () => {
     setLoading(true);
@@ -161,7 +163,7 @@ export default function Sidebar({
             rightIcon={<FiChevronDown />}
             textAlign="left"
             fontWeight="medium"
-            bg={useColorModeValue('white', 'canvas.default')}
+            bg={menuButtonBg}
           >
             <HStack spacing={2}>
               <Text fontSize="lg">{currentLocation?.icon || '📍'}</Text>
@@ -291,7 +293,7 @@ export default function Sidebar({
                       px={1.5}
                       py={0.5}
                       borderRadius="full"
-                      bg={useColorModeValue('canvasLight.inset', 'canvas.inset')}
+                      bg={badgeCountBg}
                       color={mutedText}
                       fontSize="xs"
                     >

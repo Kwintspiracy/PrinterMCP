@@ -1,11 +1,17 @@
 /**
  * Local development server that mimics Vercel's serverless function behavior
  * This allows testing without Vercel CLI login
+ * 
+ * Run with: npx tsx dev-server.js
  */
 
-const express = require('express');
-const path = require('path');
-const { createServer } = require('http');
+import express from 'express';
+import path from 'path';
+import { createServer } from 'http';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3001;
@@ -25,29 +31,35 @@ app.use((req, res, next) => {
   next();
 });
 
-// Load API handlers
-const apiHandlers = {
-  control: require('./api/control.ts'),
-  status: require('./api/status.ts'),
-  print: require('./api/print.ts'),
-  stream: require('./api/stream.ts'),
-  health: require('./api/health.ts'),
-  info: require('./api/info.ts'),
-  queue: require('./api/queue.ts'),
-  settings: require('./api/settings.ts'),
-  printers: require('./api/printers.ts'),
-  mcp: require('./api/mcp.ts'),
-};
+// Load API handlers dynamically
+const apiHandlers = {};
+
+async function loadHandlers() {
+  const handlers = ['control', 'status', 'print', 'stream', 'health', 'info', 'queue', 'settings', 'printers', 'mcp'];
+  console.log('Loading API handlers...');
+  for (const name of handlers) {
+    try {
+      const module = await import(`./api/${name}.ts`);
+      apiHandlers[name] = module;
+      console.log(`  ✓ Loaded handler: ${name}`);
+    } catch (error) {
+      console.error(`  ✗ Failed to load handler ${name}:`, error.message);
+    }
+  }
+  console.log(`Loaded ${Object.keys(apiHandlers).length} handlers`);
+}
 
 // Route API requests to appropriate handlers
-app.all('/api/:handler*', async (req, res) => {
+app.all('/api/:handler', async (req, res) => {
   const handlerName = req.params.handler;
+  console.log(`[API] ${req.method} /api/${handlerName} - Loaded handlers: ${Object.keys(apiHandlers).join(', ')}`);
   const handler = apiHandlers[handlerName];
-  
+
   if (!handler || !handler.default) {
-    return res.status(404).json({ error: `API handler '${handlerName}' not found` });
+    console.error(`[API] Handler '${handlerName}' not found in apiHandlers`);
+    return res.status(404).json({ error: `API handler '${handlerName}' not found`, availableHandlers: Object.keys(apiHandlers) });
   }
-  
+
   try {
     // Call the Vercel function handler
     await handler.default(req, res);
@@ -57,20 +69,26 @@ app.all('/api/:handler*', async (req, res) => {
   }
 });
 
-// Serve the React app for all other routes
-app.get('*', (req, res) => {
+// Serve the React app for all other routes (Express 5.x syntax)
+app.get('/{*splat}', (req, res) => {
   res.sendFile(path.join(__dirname, 'public-react', 'index.html'));
 });
 
 // Create and start server
 const server = createServer(app);
 
-server.listen(PORT, () => {
-  console.log(`\n🚀 Development server running at http://localhost:${PORT}`);
-  console.log(`📡 API endpoints available at http://localhost:${PORT}/api/*`);
-  console.log(`🖥️  Frontend available at http://localhost:${PORT}`);
-  console.log(`\n✨ This server mimics Vercel's serverless environment locally`);
-  console.log(`   No Vercel login required!\n`);
+// Load handlers and start server
+loadHandlers().then(() => {
+  server.listen(PORT, () => {
+    console.log(`\n🚀 Development server running at http://localhost:${PORT}`);
+    console.log(`📡 API endpoints available at http://localhost:${PORT}/api/*`);
+    console.log(`🖥️  Frontend available at http://localhost:${PORT}`);
+    console.log(`\n✨ This server mimics Vercel's serverless environment locally`);
+    console.log(`   No Vercel login required!\n`);
+  });
+}).catch(err => {
+  console.error('Failed to load handlers:', err);
+  process.exit(1);
 });
 
 // Handle graceful shutdown

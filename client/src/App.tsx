@@ -39,7 +39,7 @@ function App() {
   const [currentLocationId, setCurrentLocationId] = useState<string>('loc-home'); // Default to Home
   const toast = useToast();
   const { colorMode, toggleColorMode } = useColorMode();
-  
+
   // Use ref to track selected printer ID for polling (avoids stale closure)
   const selectedPrinterIdRef = useRef<string | undefined>(undefined);
   // Track if SSE should be disabled
@@ -72,21 +72,21 @@ function App() {
   // Handle printer selection from sidebar (just for viewing, doesn't change location)
   const handleSelectPrinter = useCallback(async (printerId: string) => {
     console.log('[App] Selecting printer:', printerId);
-    
+
     // Update both state and ref immediately
     setSelectedPrinterId(printerId);
     selectedPrinterIdRef.current = printerId;
     sseDisabledRef.current = true; // Disable SSE updates when selecting specific printer
-    
+
     // Immediately fetch status for the selected printer
     try {
       console.log('[App] Fetching status for printer:', printerId);
       const data = await api.getStatus(printerId);
       console.log('[App] Received status:', data.name, data.id);
-      
+
       setStatus(data);
       showToast(`Selected: ${data.name}`, 'info');
-      
+
       // If status includes statistics, use them
       if (data.statistics) {
         setStats({
@@ -99,8 +99,8 @@ function App() {
           maintenanceCycles: data.statistics.maintenanceCycles || 0,
           totalErrors: data.statistics.totalErrors || 0,
           averageJobSize: data.statistics.averageJobSize || 0,
-          successRate: data.statistics.totalJobs > 0 
-            ? (data.statistics.successfulJobs / data.statistics.totalJobs) * 100 
+          successRate: data.statistics.totalJobs > 0
+            ? (data.statistics.successfulJobs / data.statistics.totalJobs) * 100
             : 100,
         });
       }
@@ -110,36 +110,54 @@ function App() {
     }
   }, [showToast]);
 
-  // Real-time updates via SSE + fallback polling
+  // Initialize: Load printers and select default on mount
+  useEffect(() => {
+    const initializePrinters = async () => {
+      try {
+        const printersData = await api.getPrinters();
+        console.log('[App] Loaded printers:', printersData.printers.length);
+
+        if (printersData.printers.length > 0) {
+          // Find default printer or use first one
+          const defaultPrinter = printersData.summary.defaultPrinterId
+            ? printersData.printers.find(p => p.id === printersData.summary.defaultPrinterId)
+            : printersData.printers[0];
+
+          if (defaultPrinter) {
+            console.log('[App] Auto-selecting default printer:', defaultPrinter.name, defaultPrinter.id);
+            setSelectedPrinterId(defaultPrinter.id);
+            selectedPrinterIdRef.current = defaultPrinter.id;
+            sseDisabledRef.current = true; // Use multi-printer mode
+          }
+        }
+      } catch (error) {
+        console.error('[App] Failed to load printers:', error);
+      }
+    };
+
+    initializePrinters();
+  }, []);
+
+  // Polling for selected printer status
   useEffect(() => {
     let pollInterval: NodeJS.Timeout | null = null;
-    let sseCleanup: (() => void) | null = null;
-    
-    console.log('[App] Setting up SSE and polling');
-    
-    // Set up SSE for real-time updates (will be ignored when specific printer selected)
-    sseCleanup = useSSE((newStatus) => {
-      // Only update from SSE if no specific printer is selected
-      if (!sseDisabledRef.current) {
-        console.log('[App] SSE update received:', newStatus.name);
-        setStatus(newStatus);
-      } else {
-        console.log('[App] SSE update ignored (multi-printer mode)');
-      }
-    });
 
-    // Polling function - respects selected printer
     const poll = async () => {
       const printerId = selectedPrinterIdRef.current;
-      console.log('[App] Polling for printer:', printerId || 'default');
-      
+      if (!printerId) {
+        console.log('[App] No printer selected, skipping poll');
+        return;
+      }
+
+      console.log('[App] Polling for printer:', printerId);
+
       try {
         const data = await api.getStatus(printerId);
         console.log('[App] Poll received:', data.name, data.id);
         setStatus(data);
-        
-        // Update stats from multi-printer status if available
-        if (data.statistics && printerId) {
+
+        // Update stats from multi-printer status
+        if (data.statistics) {
           setStats({
             totalPagesPrinted: data.statistics.totalPagesPrinted || 0,
             totalJobs: data.statistics.totalJobs || 0,
@@ -150,8 +168,8 @@ function App() {
             maintenanceCycles: data.statistics.maintenanceCycles || 0,
             totalErrors: data.statistics.totalErrors || 0,
             averageJobSize: data.statistics.averageJobSize || 0,
-            successRate: data.statistics.totalJobs > 0 
-              ? (data.statistics.successfulJobs / data.statistics.totalJobs) * 100 
+            successRate: data.statistics.totalJobs > 0
+              ? (data.statistics.successfulJobs / data.statistics.totalJobs) * 100
               : 100,
           });
         }
@@ -160,21 +178,16 @@ function App() {
       }
     };
 
-    // Initial fetch
-    poll();
-    
-    // Fetch legacy statistics on initial load
-    api.getStatistics().then(setStats).catch(console.error);
-    
-    // Poll every 5 seconds (increased from 3 to reduce API calls)
-    pollInterval = setInterval(poll, 5000);
+    // Start polling (first poll happens immediately when selectedPrinterId is set)
+    if (selectedPrinterId) {
+      poll(); // Initial fetch
+      pollInterval = setInterval(poll, 5000);
+    }
 
     return () => {
-      console.log('[App] Cleaning up SSE and polling');
-      if (sseCleanup) sseCleanup();
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, []); // Empty dependency - only run once on mount
+  }, [selectedPrinterId]); // Re-run when selected printer changes
 
   const getStatusColor = (printerStatus?: string) => {
     switch (printerStatus) {
@@ -377,11 +390,11 @@ function App() {
                   inkLevels={status?.inkLevels}
                   inkStatus={status?.inkStatus}
                   onRefill={async (color) => {
-                    const result = await api.refillInk(color);
+                    const result = await api.refillInk(color, status?.id);
                     showToast(result.message, result.success ? 'success' : 'error');
                   }}
                   onSetLevel={async (color, level) => {
-                    const result = await api.setInkLevel(color, level);
+                    const result = await api.setInkLevel(color, level, status?.id);
                     showToast(result.message, result.success ? 'success' : 'error');
                   }}
                 />
@@ -391,11 +404,11 @@ function App() {
                 <PaperTray
                   paper={status?.paper}
                   onLoadPaper={async (count, size) => {
-                    const result = await api.loadPaper(count, size);
+                    const result = await api.loadPaper(count, size, status?.id);
                     showToast(result.message, result.success ? 'success' : 'error');
                   }}
                   onSetPaperCount={async (count, size) => {
-                    const result = await api.setPaperCount(count, size);
+                    const result = await api.setPaperCount(count, size, status?.id);
                     showToast(result.message, result.success ? 'success' : 'error');
                   }}
                 />

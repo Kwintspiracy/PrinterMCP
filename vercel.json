@@ -4,12 +4,10 @@
   "framework": null,
   "functions": {
     "api/*.ts": {
-      "maxDuration": 10
+      "maxDuration": 10,
+      "includeFiles": "build/**"
     }
   },
-  "includeFiles": [
-    "build/**"
-  ],
   "rewrites": [
     {
       "source": "/api/(.*)",

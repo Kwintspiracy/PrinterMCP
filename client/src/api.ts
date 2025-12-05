@@ -191,18 +191,18 @@ export const api = {
    */
   async getStatus(printerId?: string): Promise<PrinterStatus> {
     try {
-      const url = printerId 
+      const url = printerId
         ? `${API_BASE}/status?printerId=${encodeURIComponent(printerId)}`
         : `${API_BASE}/status`;
-      
+
       console.log('[API] getStatus called, printerId:', printerId, 'url:', url);
-      
+
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
       const data = await response.json();
-      
+
       // Ensure required fields exist
       return {
         id: data.id,
@@ -352,36 +352,38 @@ export const api = {
     return response.json();
   },
 
-  async refillInk(color: string) {
-    const response = await fetch(`${API_BASE}/refill/${color}`, {
+  async refillInk(color: string, printerId?: string) {
+    const response = await fetch(`${API_BASE}/control`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'refill_ink', color, printerId }),
     });
     return response.json();
   },
 
-  async setInkLevel(color: string, level: number) {
+  async setInkLevel(color: string, level: number, printerId?: string) {
     const response = await fetch(`${API_BASE}/control`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'set_ink', color, level }),
+      body: JSON.stringify({ action: 'set_ink', color, level, printerId }),
     });
     return response.json();
   },
 
-  async loadPaper(count: number, paperSize?: string) {
+  async loadPaper(count: number, paperSize?: string, printerId?: string) {
     const response = await fetch(`${API_BASE}/control`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'load_paper', count, paperSize }),
+      body: JSON.stringify({ action: 'load_paper', count, paperSize, printerId }),
     });
     return response.json();
   },
 
-  async setPaperCount(count: number, paperSize?: string) {
+  async setPaperCount(count: number, paperSize?: string, printerId?: string) {
     const response = await fetch(`${API_BASE}/control`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'set_paper_count', count, paperSize }),
+      body: JSON.stringify({ action: 'set_paper_count', count, paperSize, printerId }),
     });
     return response.json();
   },

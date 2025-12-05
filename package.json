@@ -22,7 +22,7 @@
     "dev:mcp-http": "npm run build:mcp-http && node build/mcp-http-server.js",
     "dev:ui": "vite",
     "dev:full": "npm run build:web && concurrently \"npm run dev:ui\" \"npm run start:web\"",
-    "dev:vercel": "npm run build:vercel && node dev-server.js",
+    "dev:vercel": "npm run build:vercel && npx tsx dev-server.js",
     "watch": "tsc --watch",
     "vercel-build": "npm run build:vercel"
   },
@@ -65,6 +65,7 @@
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.1.0",
     "concurrently": "^9.2.1",
+    "tsx": "^4.7.0",
     "typescript": "^5.9.3",
     "vite": "^7.1.12"
   }
