@@ -74,6 +74,20 @@ export interface IStorageAdapter {
  * Factory function to create appropriate storage adapter based on environment
  */
 export async function createStorageAdapter(): Promise<IStorageAdapter> {
+  // Check for Supabase credentials first
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY;
+
+  if (supabaseUrl && supabaseKey) {
+    console.log('[StorageAdapter] Supabase credentials found, using Supabase storage');
+    try {
+      const { SupabaseStorage } = await import('./supabase-storage.js');
+      return new SupabaseStorage();
+    } catch (error) {
+      console.warn('[StorageAdapter] Supabase storage failed to initialize, falling back to other methods:', error);
+    }
+  }
+
   // Auto-detect Vercel environment
   const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
   const storageType = process.env.STORAGE_TYPE || (isVercel ? 'vercel-kv' : 'file');
@@ -81,16 +95,6 @@ export async function createStorageAdapter(): Promise<IStorageAdapter> {
   console.log(`[StorageAdapter] Creating adapter: type=${storageType}, isVercel=${isVercel}`);
 
   switch (storageType) {
-    case 'supabase':
-      try {
-        const { SupabaseStorage } = await import('./supabase-storage.js');
-        return new SupabaseStorage();
-      } catch (error) {
-        console.warn('[StorageAdapter] Supabase storage failed, falling back to file storage:', error);
-        const { FileStorage } = await import('./file-storage.js');
-        return new FileStorage();
-      }
-
     case 'vercel-kv':
       try {
         const { VercelKVStorage } = await import('./vercel-storage.js');
@@ -110,6 +114,12 @@ export async function createStorageAdapter(): Promise<IStorageAdapter> {
 
     case 'file':
     default:
+      // In Vercel, file storage won't work for persistence, so use in-memory if we fell through
+      if (isVercel) {
+        console.warn('[StorageAdapter] File storage selected but running in Vercel, using in-memory storage');
+        return createInMemoryAdapter();
+      }
+
       const { FileStorage } = await import('./file-storage.js');
       return new FileStorage();
   }
