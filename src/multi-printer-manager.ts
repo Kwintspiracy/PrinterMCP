@@ -80,7 +80,24 @@ export class MultiPrinterManager {
 
     // Initialize with default state
     console.log('[MultiPrinterManager] Creating default state with sample printers');
-    return this.createDefaultState();
+    const defaultState = this.createDefaultState();
+
+    // Save the default state so IDs persist
+    if (this.storage) {
+      console.log('[MultiPrinterManager] Persisting default state to storage...');
+      try {
+        // We need to set this.state temporarily for saveState to work if it uses it, 
+        // or just call storage directly. 
+        // Looking at saveState(), it uses this.state.
+        // So let's use the storage adapter directly to avoid side effects during load
+        await (this.storage as any).saveState?.(defaultState, MULTI_PRINTER_STATE_KEY);
+        console.log('[MultiPrinterManager] Default state persisted');
+      } catch (error) {
+        console.warn('[MultiPrinterManager] Failed to persist default state:', error);
+      }
+    }
+
+    return defaultState;
   }
 
   /**
