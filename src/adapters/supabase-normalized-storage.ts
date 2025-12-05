@@ -270,32 +270,45 @@ export class SupabaseNormalizedStorage {
     // Conversion Methods
     // ============================================
 
-    private dbRowToPrinter(row: any): PrinterInstance {
+    private dbRowToPrinter = (row: any): PrinterInstance => {
+        // Convert separate ink columns to inkLevels object
+        const inkLevels: any = {};
+        if (row.ink_cyan !== null && row.ink_cyan !== undefined) inkLevels.cyan = Number(row.ink_cyan);
+        if (row.ink_magenta !== null && row.ink_magenta !== undefined) inkLevels.magenta = Number(row.ink_magenta);
+        if (row.ink_yellow !== null && row.ink_yellow !== undefined) inkLevels.yellow = Number(row.ink_yellow);
+        if (row.ink_black !== null && row.ink_black !== undefined) inkLevels.black = Number(row.ink_black);
+        if (row.ink_photo_black !== null && row.ink_photo_black !== undefined) inkLevels.photo_black = Number(row.ink_photo_black);
+
+        // Convert separate statistics columns to statistics object
+        const totalInkUsed = typeof row.total_ink_used === 'string'
+            ? JSON.parse(row.total_ink_used)
+            : (row.total_ink_used || { cyan: 0, magenta: 0, yellow: 0, black: 0 });
+
         return {
             id: row.id,
             name: row.name,
             typeId: row.type_id,
             locationId: row.location_id,
             status: row.status,
-            inkLevels: row.ink_levels || {},
+            inkLevels,
             paperCount: row.paper_count,
             paperSize: row.paper_size,
             paperTrayCapacity: row.paper_tray_capacity,
-            queue: [], // Will be loaded separately if needed
+            queue: [],
             currentJob: null,
             completedJobs: [],
-            errors: row.errors || [],
+            errors: [],
             logs: [],
-            statistics: row.statistics || {
-                totalPagesPrinted: 0,
-                totalJobs: 0,
-                successfulJobs: 0,
-                failedJobs: 0,
-                totalInkUsed: { cyan: 0, magenta: 0, yellow: 0, black: 0 },
+            statistics: {
+                totalPagesPrinted: row.total_pages_printed || 0,
+                totalJobs: row.total_jobs || 0,
+                successfulJobs: row.successful_jobs || 0,
+                failedJobs: row.failed_jobs || 0,
+                totalInkUsed,
                 maintenanceOperations: 0,
-                lastMaintenanceDate: null,
+                lastMaintenanceDate: row.last_used_at ? new Date(row.last_used_at).getTime() : null,
             },
-            settings: row.settings || {
+            settings: typeof row.settings === 'string' ? JSON.parse(row.settings) : (row.settings || {
                 defaultQuality: 'normal',
                 defaultPaperSize: 'A4',
                 enableErrorSimulation: false,
@@ -303,35 +316,43 @@ export class SupabaseNormalizedStorage {
                 autoWakeup: true,
                 sleepAfterMinutes: 30,
                 printSpeedMultiplier: 1.0,
-            },
+            }),
             lastUpdated: new Date(row.updated_at).getTime(),
-            lastStartTime: row.last_start_time,
+            lastStartTime: row.last_used_at ? new Date(row.last_used_at).getTime() : Date.now(),
             createdAt: new Date(row.created_at).getTime(),
-            version: row.version,
+            version: 1,
         };
-    }
+    };
 
-    private printerToDbRow(printer: PrinterInstance): any {
+    private printerToDbRow = (printer: PrinterInstance): any => {
         return {
             id: printer.id,
             name: printer.name,
             type_id: printer.typeId,
             location_id: printer.locationId || null,
             status: printer.status,
-            ink_levels: printer.inkLevels,
+            // Convert inkLevels object to separate columns
+            ink_cyan: printer.inkLevels?.cyan || 0,
+            ink_magenta: printer.inkLevels?.magenta || 0,
+            ink_yellow: printer.inkLevels?.yellow || 0,
+            ink_black: printer.inkLevels?.black || 0,
+            ink_photo_black: printer.inkLevels?.photo_black || null,
             paper_count: printer.paperCount,
             paper_size: printer.paperSize,
             paper_tray_capacity: printer.paperTrayCapacity,
-            settings: printer.settings,
-            statistics: printer.statistics,
-            errors: printer.errors || [],
-            version: printer.version || 1,
-            last_start_time: printer.lastStartTime,
+            settings: JSON.stringify(printer.settings || {}),
+            // Convert statistics object to separate columns
+            total_pages_printed: printer.statistics?.totalPagesPrinted || 0,
+            total_jobs: printer.statistics?.totalJobs || 0,
+            successful_jobs: printer.statistics?.successfulJobs || 0,
+            failed_jobs: printer.statistics?.failedJobs || 0,
+            total_ink_used: JSON.stringify(printer.statistics?.totalInkUsed || { cyan: 0, magenta: 0, yellow: 0, black: 0 }),
+            last_used_at: printer.statistics?.lastMaintenanceDate ? new Date(printer.statistics.lastMaintenanceDate).toISOString() : null,
             updated_at: new Date().toISOString(),
         };
-    }
+    };
 
-    private dbRowToLocation(row: any): PrinterLocation {
+    private dbRowToLocation = (row: any): PrinterLocation => {
         return {
             id: row.id,
             name: row.name,
@@ -343,9 +364,9 @@ export class SupabaseNormalizedStorage {
             createdAt: new Date(row.created_at).getTime(),
             updatedAt: new Date(row.updated_at).getTime(),
         };
-    }
+    };
 
-    private locationToDbRow(location: PrinterLocation): any {
+    private locationToDbRow = (location: PrinterLocation): any => {
         return {
             id: location.id,
             name: location.name,
@@ -355,5 +376,5 @@ export class SupabaseNormalizedStorage {
             sort_order: location.sortOrder,
             updated_at: new Date().toISOString(),
         };
-    }
+    };
 }

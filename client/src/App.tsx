@@ -181,7 +181,7 @@ function App() {
     // Start polling (first poll happens immediately when selectedPrinterId is set)
     if (selectedPrinterId) {
       poll(); // Initial fetch
-      pollInterval = setInterval(poll, 5000);
+      pollInterval = setInterval(poll, 30000); // Poll every 30 seconds
     }
 
     return () => {
