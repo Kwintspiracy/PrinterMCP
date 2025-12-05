@@ -390,12 +390,59 @@ function App() {
                   inkLevels={status?.inkLevels}
                   inkStatus={status?.inkStatus}
                   onRefill={async (color) => {
+                    // Optimistic update - set to 100% immediately
+                    if (status) {
+                      setStatus({
+                        ...status,
+                        inkLevels: {
+                          ...status.inkLevels,
+                          [color]: 100
+                        }
+                      });
+                    }
+
                     const result = await api.refillInk(color, status?.id);
+                    if (!result.success && status?.id) {
+                      // Revert on failure
+                      const freshStatus = await api.getStatus(status.id);
+                      setStatus(freshStatus);
+                    }
                     showToast(result.message, result.success ? 'success' : 'error');
                   }}
                   onSetLevel={async (color, level) => {
-                    const result = await api.setInkLevel(color, level, status?.id);
-                    showToast(result.message, result.success ? 'success' : 'error');
+                    // Optimistic update - update UI immediately
+                    if (status) {
+                      setStatus({
+                        ...status,
+                        inkLevels: {
+                          ...status.inkLevels,
+                          [color]: level
+                        }
+                      });
+                    }
+
+                    // Send to server in background
+                    try {
+                      const result = await api.setInkLevel(color, level, status?.id);
+                      if (!result.success) {
+                        // Revert on failure
+                        showToast(result.message || 'Failed to update ink level', 'error');
+                        // Refresh from server
+                        if (status?.id) {
+                          const freshStatus = await api.getStatus(status.id);
+                          setStatus(freshStatus);
+                        }
+                      } else {
+                        showToast(result.message, 'success');
+                      }
+                    } catch (error) {
+                      showToast('Failed to update ink level', 'error');
+                      // Refresh from server on error
+                      if (status?.id) {
+                        const freshStatus = await api.getStatus(status.id);
+                        setStatus(freshStatus);
+                      }
+                    }
                   }}
                 />
               </GridItem>
@@ -404,11 +451,44 @@ function App() {
                 <PaperTray
                   paper={status?.paper}
                   onLoadPaper={async (count, size) => {
+                    // Optimistic update
+                    if (status) {
+                      const newCount = Math.min((status.paper?.count || 0) + count, status.paper?.capacity || 100);
+                      setStatus({
+                        ...status,
+                        paper: {
+                          ...status.paper!,
+                          count: newCount,
+                          size: size || status.paper?.size || 'A4'
+                        }
+                      });
+                    }
+
                     const result = await api.loadPaper(count, size, status?.id);
+                    if (!result.success && status?.id) {
+                      const freshStatus = await api.getStatus(status.id);
+                      setStatus(freshStatus);
+                    }
                     showToast(result.message, result.success ? 'success' : 'error');
                   }}
                   onSetPaperCount={async (count, size) => {
+                    // Optimistic update
+                    if (status) {
+                      setStatus({
+                        ...status,
+                        paper: {
+                          ...status.paper!,
+                          count,
+                          size: size || status.paper?.size || 'A4'
+                        }
+                      });
+                    }
+
                     const result = await api.setPaperCount(count, size, status?.id);
+                    if (!result.success && status?.id) {
+                      const freshStatus = await api.getStatus(status.id);
+                      setStatus(freshStatus);
+                    }
                     showToast(result.message, result.success ? 'success' : 'error');
                   }}
                 />
