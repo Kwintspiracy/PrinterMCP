@@ -5,11 +5,7 @@
  */
 
 import { join, dirname } from 'path';
-import { fileURLToPath, pathToFileURL } from 'url';
-
-// Get the directory of this file
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { pathToFileURL } from 'url';
 
 // Helper to resolve module paths - returns file:// URL for ESM compatibility
 function resolveModulePath(moduleName: string): string {

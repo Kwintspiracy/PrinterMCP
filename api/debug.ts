@@ -1,11 +1,11 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { pathToFileURL } from 'url';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
+    // Use global __dirname for CommonJS
+    const currentDir = __dirname;
     const cwd = process.cwd();
 
     const debugInfo = {
@@ -18,16 +18,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY ? 'Set' : 'Not Set',
         },
         paths: {
-            __dirname,
-            __filename,
+            __dirname: currentDir,
             cwd,
         },
         files: {
             cwd: await listDir(cwd),
-            dirname: await listDir(__dirname),
-            parent: await listDir(path.join(__dirname, '..')),
+            dirname: await listDir(currentDir),
+            parent: await listDir(path.join(currentDir, '..')),
             build: await listDir(path.join(cwd, 'build')).catch(e => `Error: ${e.message}`),
-            api_sibling_build: await listDir(path.join(__dirname, '..', 'build')).catch(e => `Error: ${e.message}`),
+            api_sibling_build: await listDir(path.join(currentDir, '..', 'build')).catch(e => `Error: ${e.message}`),
         }
     };
 
