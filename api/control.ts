@@ -193,7 +193,7 @@ async function handleMultiPrinterControl(
 
   // Get all printers to update the specific one
   const allPrinters = await manager.getAllPrinters();
-  const printerIndex = allPrinters.findIndex(p => p.id === printerId);
+  const printerIndex = allPrinters.findIndex((p: any) => p.id === printerId);
   if (printerIndex === -1) {
     return res.status(404).json({ error: 'Printer not found', printerId });
   }

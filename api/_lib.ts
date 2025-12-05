@@ -51,6 +51,7 @@ export async function loadMultiPrinterManager() {
 }
 
 // Re-export types from source for TypeScript compilation
+// Re-export types from source for TypeScript compilation
 export type { VirtualPrinter } from '../src/printer';
 export type { StateManager } from '../src/state-manager';
-export type { PrinterInstance, PrinterType, PrinterLocation } from '../src/multi-printer-manager';
+export type { PrinterInstance, PrinterType, PrinterLocation } from '../src/types';
