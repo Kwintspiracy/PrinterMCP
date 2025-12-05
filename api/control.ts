@@ -331,12 +331,16 @@ async function updatePrinterState(
 
     const storage = (manager as any).storage;
     if (storage && typeof storage.saveState === 'function') {
+      console.log(`[ControlAPI] Saving state to storage (${storage.getType()})...`);
       await storage.saveState(state, 'multi-printer-state');
+      console.log('[ControlAPI] State saved successfully');
+    } else {
+      console.warn('[ControlAPI] Storage not available or invalid, state not saved');
     }
 
     return true;
   } catch (error) {
-    console.error('Error updating printer state:', error);
+    console.error('[ControlAPI] Error updating printer state:', error);
     return false;
   }
 }
