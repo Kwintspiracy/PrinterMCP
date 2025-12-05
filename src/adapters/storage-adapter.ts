@@ -78,7 +78,7 @@ export async function createStorageAdapter(): Promise<IStorageAdapter> {
   const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
   const storageType = process.env.STORAGE_TYPE || (isVercel ? 'vercel-kv' : 'file');
 
-  console.log(`Storage adapter: type=${storageType}, isVercel=${isVercel}`);
+  console.log(`[StorageAdapter] Creating adapter: type=${storageType}, isVercel=${isVercel}`);
 
   switch (storageType) {
     case 'supabase':
@@ -86,7 +86,7 @@ export async function createStorageAdapter(): Promise<IStorageAdapter> {
         const { SupabaseStorage } = await import('./supabase-storage.js');
         return new SupabaseStorage();
       } catch (error) {
-        console.warn('Supabase storage failed to initialize, falling back to file storage:', error);
+        console.warn('[StorageAdapter] Supabase storage failed, falling back to file storage:', error);
         const { FileStorage } = await import('./file-storage.js');
         return new FileStorage();
       }
@@ -94,11 +94,18 @@ export async function createStorageAdapter(): Promise<IStorageAdapter> {
     case 'vercel-kv':
       try {
         const { VercelKVStorage } = await import('./vercel-storage.js');
-        return new VercelKVStorage();
+        const storage = new VercelKVStorage();
+        // Test if KV is actually available
+        const isHealthy = await storage.healthCheck().catch(() => false);
+        if (isHealthy) {
+          console.log('[StorageAdapter] Vercel KV is healthy');
+          return storage;
+        }
+        console.warn('[StorageAdapter] Vercel KV not healthy, using in-memory storage');
+        return createInMemoryAdapter();
       } catch (error) {
-        console.warn('Vercel KV storage failed to initialize, falling back to file storage:', error);
-        const { FileStorage } = await import('./file-storage.js');
-        return new FileStorage();
+        console.warn('[StorageAdapter] Vercel KV failed, using in-memory storage:', error);
+        return createInMemoryAdapter();
       }
 
     case 'file':
@@ -106,4 +113,29 @@ export async function createStorageAdapter(): Promise<IStorageAdapter> {
       const { FileStorage } = await import('./file-storage.js');
       return new FileStorage();
   }
+}
+
+/**
+ * Simple in-memory storage adapter for serverless environments without persistent storage
+ */
+function createInMemoryAdapter(): IStorageAdapter {
+  const store = new Map<string, any>();
+
+  return {
+    async loadState(key?: string): Promise<PrinterState | null> {
+      return store.get(key || 'default') || null;
+    },
+    async saveState(state: PrinterState, key?: string): Promise<void> {
+      store.set(key || 'default', state);
+    },
+    async healthCheck(): Promise<boolean> {
+      return true;
+    },
+    async clearState(): Promise<void> {
+      store.clear();
+    },
+    getType(): string {
+      return 'in-memory';
+    }
+  };
 }

@@ -28,17 +28,27 @@ export class MultiPrinterManager {
   private state: MultiPrinterState | null = null;
   private initialized = false;
 
-  constructor() {}
+  constructor() { }
 
   /**
    * Initialize storage and load state
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
-    
-    this.storage = await createStorageAdapter();
+
+    console.log('[MultiPrinterManager] Initializing...');
+
+    try {
+      this.storage = await createStorageAdapter();
+      console.log('[MultiPrinterManager] Storage adapter created:', this.storage?.getType());
+    } catch (error) {
+      console.warn('[MultiPrinterManager] Storage adapter failed, using in-memory only:', error);
+      this.storage = null;
+    }
+
     this.state = await this.loadState();
     this.initialized = true;
+    console.log('[MultiPrinterManager] Initialized with', Object.keys(this.state.printers).length, 'printers');
   }
 
   /**
@@ -56,16 +66,20 @@ export class MultiPrinterManager {
   private async loadState(): Promise<MultiPrinterState> {
     try {
       if (this.storage) {
+        console.log('[MultiPrinterManager] Loading state from storage...');
         const raw = await (this.storage as any).loadState?.(MULTI_PRINTER_STATE_KEY);
         if (raw && typeof raw === 'object' && 'printers' in raw) {
+          console.log('[MultiPrinterManager] Loaded state from storage');
           return raw as MultiPrinterState;
         }
+        console.log('[MultiPrinterManager] No existing state in storage, creating default');
       }
     } catch (error) {
-      console.error('Error loading multi-printer state:', error);
+      console.warn('[MultiPrinterManager] Error loading state, using defaults:', error);
     }
-    
+
     // Initialize with default state
+    console.log('[MultiPrinterManager] Creating default state with sample printers');
     return this.createDefaultState();
   }
 
@@ -74,10 +88,10 @@ export class MultiPrinterManager {
    */
   private async saveState(): Promise<boolean> {
     if (!this.state || !this.storage) return false;
-    
+
     this.state.version++;
     this.state.lastUpdated = Date.now();
-    
+
     try {
       await (this.storage as any).saveState?.(this.state, MULTI_PRINTER_STATE_KEY);
       return true;
@@ -92,7 +106,7 @@ export class MultiPrinterManager {
    */
   private createDefaultState(): MultiPrinterState {
     const now = Date.now();
-    
+
     // Create locations
     const locations: Record<string, PrinterLocation> = {};
     const officeLocation: PrinterLocation = {
@@ -106,7 +120,7 @@ export class MultiPrinterManager {
       createdAt: now,
       updatedAt: now,
     };
-    
+
     const homeLocation: PrinterLocation = {
       id: 'loc-home',
       name: 'Home',
@@ -118,13 +132,13 @@ export class MultiPrinterManager {
       createdAt: now,
       updatedAt: now,
     };
-    
+
     locations[officeLocation.id] = officeLocation;
     locations[homeLocation.id] = homeLocation;
 
     // Create default printers
     const printers: Record<string, PrinterInstance> = {};
-    
+
     // Office printers
     const officeLaser = this.createPrinterInstance(
       'HP LaserJet Pro',
@@ -133,7 +147,7 @@ export class MultiPrinterManager {
     );
     printers[officeLaser.id] = officeLaser;
     officeLocation.printerIds.push(officeLaser.id);
-    
+
     const officeColor = this.createPrinterInstance(
       'HP Color LaserJet',
       'hp-color-laserjet-pro-m454dw',
@@ -141,7 +155,7 @@ export class MultiPrinterManager {
     );
     printers[officeColor.id] = officeColor;
     officeLocation.printerIds.push(officeColor.id);
-    
+
     const officeJet = this.createPrinterInstance(
       'HP OfficeJet Pro 9015e',
       'hp-officejet-pro-9015e',
@@ -158,7 +172,7 @@ export class MultiPrinterManager {
     );
     printers[homeDeskjet.id] = homeDeskjet;
     homeLocation.printerIds.push(homeDeskjet.id);
-    
+
     const homeEnvy = this.createPrinterInstance(
       'HP ENVY 6055e',
       'hp-envy-6055e',
@@ -166,7 +180,7 @@ export class MultiPrinterManager {
     );
     printers[homeEnvy.id] = homeEnvy;
     homeLocation.printerIds.push(homeEnvy.id);
-    
+
     const homeSmartTank = this.createPrinterInstance(
       'HP Smart Tank 5101',
       'hp-smart-tank-5101',
@@ -273,7 +287,7 @@ export class MultiPrinterManager {
     await this.ensureInitialized();
     const location = this.state!.locations[locationId];
     if (!location) return [];
-    
+
     return location.printerIds
       .map(id => this.state!.printers[id])
       .filter(Boolean);
@@ -284,15 +298,15 @@ export class MultiPrinterManager {
    */
   async addPrinter(name: string, typeId: string, locationId?: string): Promise<PrinterInstance> {
     await this.ensureInitialized();
-    
+
     const printer = this.createPrinterInstance(name, typeId, locationId);
     this.state!.printers[printer.id] = printer;
-    
+
     if (locationId && this.state!.locations[locationId]) {
       this.state!.locations[locationId].printerIds.push(printer.id);
       this.state!.locations[locationId].updatedAt = Date.now();
     }
-    
+
     await this.saveState();
     return printer;
   }
@@ -302,13 +316,13 @@ export class MultiPrinterManager {
    */
   async renamePrinter(printerId: string, newName: string): Promise<boolean> {
     await this.ensureInitialized();
-    
+
     const printer = this.state!.printers[printerId];
     if (!printer) return false;
-    
+
     printer.name = newName;
     printer.lastUpdated = Date.now();
-    
+
     await this.saveState();
     return true;
   }
@@ -318,24 +332,24 @@ export class MultiPrinterManager {
    */
   async movePrinter(printerId: string, newLocationId: string | null): Promise<boolean> {
     await this.ensureInitialized();
-    
+
     const printer = this.state!.printers[printerId];
     if (!printer) return false;
-    
+
     // Remove from old location
     if (printer.locationId && this.state!.locations[printer.locationId]) {
       const oldLoc = this.state!.locations[printer.locationId];
       oldLoc.printerIds = oldLoc.printerIds.filter(id => id !== printerId);
       oldLoc.updatedAt = Date.now();
     }
-    
+
     // Add to new location
     printer.locationId = newLocationId || undefined;
     if (newLocationId && this.state!.locations[newLocationId]) {
       this.state!.locations[newLocationId].printerIds.push(printerId);
       this.state!.locations[newLocationId].updatedAt = Date.now();
     }
-    
+
     printer.lastUpdated = Date.now();
     await this.saveState();
     return true;
@@ -346,25 +360,25 @@ export class MultiPrinterManager {
    */
   async deletePrinter(printerId: string): Promise<boolean> {
     await this.ensureInitialized();
-    
+
     const printer = this.state!.printers[printerId];
     if (!printer) return false;
-    
+
     // Remove from location
     if (printer.locationId && this.state!.locations[printer.locationId]) {
       const loc = this.state!.locations[printer.locationId];
       loc.printerIds = loc.printerIds.filter(id => id !== printerId);
       loc.updatedAt = Date.now();
     }
-    
+
     delete this.state!.printers[printerId];
-    
+
     // Update default if needed
     if (this.state!.defaultPrinterId === printerId) {
       const remaining = Object.keys(this.state!.printers);
       this.state!.defaultPrinterId = remaining[0];
     }
-    
+
     await this.saveState();
     return true;
   }
@@ -374,13 +388,13 @@ export class MultiPrinterManager {
    */
   async updatePrinterSettings(printerId: string, settings: Partial<PrinterSettings>): Promise<boolean> {
     await this.ensureInitialized();
-    
+
     const printer = this.state!.printers[printerId];
     if (!printer) return false;
-    
+
     printer.settings = { ...printer.settings, ...settings };
     printer.lastUpdated = Date.now();
-    
+
     await this.saveState();
     return true;
   }
@@ -410,11 +424,11 @@ export class MultiPrinterManager {
    */
   async addLocation(name: string, icon: string = '📍', color: string = '#6e7781'): Promise<PrinterLocation> {
     await this.ensureInitialized();
-    
+
     const now = Date.now();
     const id = `loc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const sortOrder = Object.keys(this.state!.locations).length;
-    
+
     const location: PrinterLocation = {
       id,
       name,
@@ -425,7 +439,7 @@ export class MultiPrinterManager {
       createdAt: now,
       updatedAt: now,
     };
-    
+
     this.state!.locations[id] = location;
     await this.saveState();
     return location;
@@ -436,13 +450,13 @@ export class MultiPrinterManager {
    */
   async renameLocation(locationId: string, newName: string): Promise<boolean> {
     await this.ensureInitialized();
-    
+
     const location = this.state!.locations[locationId];
     if (!location) return false;
-    
+
     location.name = newName;
     location.updatedAt = Date.now();
-    
+
     await this.saveState();
     return true;
   }
@@ -452,17 +466,17 @@ export class MultiPrinterManager {
    */
   async deleteLocation(locationId: string): Promise<boolean> {
     await this.ensureInitialized();
-    
+
     const location = this.state!.locations[locationId];
     if (!location) return false;
-    
+
     // Unassign printers from this location
     for (const printerId of location.printerIds) {
       if (this.state!.printers[printerId]) {
         this.state!.printers[printerId].locationId = undefined;
       }
     }
-    
+
     delete this.state!.locations[locationId];
     await this.saveState();
     return true;
@@ -500,7 +514,7 @@ export class MultiPrinterManager {
     locations: { id: string; name: string; printerCount: number }[];
   }> {
     await this.ensureInitialized();
-    
+
     return {
       printerCount: Object.keys(this.state!.printers).length,
       locationCount: Object.keys(this.state!.locations).length,
@@ -518,9 +532,9 @@ export class MultiPrinterManager {
    */
   async setDefaultPrinter(printerId: string): Promise<boolean> {
     await this.ensureInitialized();
-    
+
     if (!this.state!.printers[printerId]) return false;
-    
+
     this.state!.defaultPrinterId = printerId;
     await this.saveState();
     return true;
@@ -531,7 +545,7 @@ export class MultiPrinterManager {
    */
   async getDefaultPrinter(): Promise<PrinterInstance | null> {
     await this.ensureInitialized();
-    
+
     if (!this.state!.defaultPrinterId) return null;
     return this.state!.printers[this.state!.defaultPrinterId] || null;
   }
