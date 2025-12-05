@@ -4,10 +4,9 @@
  * in a way that works both locally and in Vercel's environment
  */
 
-import { join, dirname } from 'path';
-import { pathToFileURL } from 'url';
+import { join } from 'path';
 
-// Helper to resolve module paths - returns file:// URL for ESM compatibility
+// Helper to resolve module path
 function resolveModulePath(moduleName: string): string {
   // Try multiple possible locations for the build directory
   let buildPath: string;
@@ -22,30 +21,32 @@ function resolveModulePath(moduleName: string): string {
   }
 
   console.log(`[_lib] Resolving module: ${moduleName} -> ${buildPath}`);
-
-  // Convert to file:// URL for ESM compatibility on Windows
-  return pathToFileURL(buildPath).href;
+  return buildPath;
 }
 
 // Export pre-configured imports
 export async function loadPrinter() {
   const modulePath = resolveModulePath('printer.js');
   console.log('[_lib] Loading printer from:', modulePath);
-  const module = await import(modulePath);
+  // Use require for CommonJS compatibility
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const module = require(modulePath);
   return module.VirtualPrinter;
 }
 
 export async function loadStateManager() {
   const modulePath = resolveModulePath('state-manager.js');
   console.log('[_lib] Loading state-manager from:', modulePath);
-  const module = await import(modulePath);
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const module = require(modulePath);
   return module.StateManager;
 }
 
 export async function loadMultiPrinterManager() {
   const modulePath = resolveModulePath('multi-printer-manager.js');
   console.log('[_lib] Loading multi-printer-manager from:', modulePath);
-  const module = await import(modulePath);
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const module = require(modulePath);
   return module.getMultiPrinterManager;
 }
 
