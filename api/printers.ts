@@ -17,11 +17,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
-  const getMultiPrinterManager = await loadMultiPrinterManager();
-  const manager = getMultiPrinterManager();
-  await manager.initialize();
-
   try {
+    // Load and initialize the multi-printer manager
+    console.log('[PrintersAPI] Loading MultiPrinterManager...');
+    const getMultiPrinterManager = await loadMultiPrinterManager();
+    console.log('[PrintersAPI] Got factory function, creating manager...');
+    const manager = getMultiPrinterManager();
+    console.log('[PrintersAPI] Initializing manager...');
+    await manager.initialize();
+    console.log('[PrintersAPI] Manager initialized successfully');
+
     if (req.method === 'GET') {
       // Get all printers with locations
       const [printers, locations, summary] = await Promise.all([
@@ -30,11 +35,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         manager.getStateSummary(),
       ]);
 
+      console.log('[PrintersAPI] Loaded', printers.length, 'printers,', locations.length, 'locations');
+
       // Get printer types for reference
       const printerTypes = manager.getAvailablePrinterTypes();
 
       // Enhance printers with type info
-      const enrichedPrinters = printers.map(printer => {
+      const enrichedPrinters = printers.map((printer: any) => {
         const type = manager.getPrinterType(printer.typeId);
         return {
           ...printer,
@@ -71,7 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         printersByLocation,
         unassignedPrinters,
         summary,
-        availableTypes: printerTypes.map(t => ({
+        availableTypes: printerTypes.map((t: any) => ({
           id: t.id,
           brand: t.brand,
           model: t.model,
@@ -100,7 +107,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({
           success: false,
           error: `Invalid printer type: ${typeId}`,
-          availableTypes: manager.getAvailablePrinterTypes().map(t => t.id),
+          availableTypes: manager.getAvailablePrinterTypes().map((t: any) => t.id),
         });
       }
 
@@ -127,10 +134,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       error: 'Method not allowed',
     });
   } catch (error) {
-    console.error('Printer API error:', error);
+    console.error('[PrintersAPI] Error:', error);
     return res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Internal server error',
+      stack: error instanceof Error ? error.stack : undefined,
+      debug: {
+        cwd: process.cwd(),
+        env: process.env.VERCEL ? 'vercel' : 'local',
+      }
     });
   }
 }
