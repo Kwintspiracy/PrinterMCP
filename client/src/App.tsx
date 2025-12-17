@@ -18,7 +18,7 @@ import {
   Tooltip,
 } from '@chakra-ui/react';
 import { MoonIcon, SunIcon } from '@chakra-ui/icons';
-import { FiPrinter, FiActivity, FiBell, FiSettings, FiGitBranch } from 'react-icons/fi';
+import { FiPrinter, FiActivity, FiBell, FiSettings, FiGitBranch, FiCode } from 'react-icons/fi';
 import { api, PrinterStatus, Statistics, useSSE } from './api';
 import StatusPanel from './components/StatusPanel';
 import InkLevels from './components/InkLevels';
@@ -29,6 +29,8 @@ import PrintForm from './components/PrintForm';
 import StatsPanel from './components/StatsPanel';
 import EventLog from './components/EventLog';
 import Sidebar from './components/Sidebar';
+import TemplateEditor from './components/TemplateEditor';
+import MCPConfigHelper from './components/MCPConfigHelper';
 
 function App() {
   const [status, setStatus] = useState<PrinterStatus | null>(null);
@@ -344,6 +346,12 @@ function App() {
                   <Text>Activity</Text>
                 </HStack>
               </Tab>
+              <Tab>
+                <HStack spacing={2}>
+                  <Icon as={FiCode} boxSize={4} />
+                  <Text>Testing</Text>
+                </HStack>
+              </Tab>
             </TabList>
           </Tabs>
         </Container>
@@ -602,6 +610,17 @@ function App() {
             <Grid templateColumns={{ base: '1fr' }} gap={4}>
               <GridItem>
                 <EventLog />
+              </GridItem>
+            </Grid>
+          )}
+
+          {activeTab === 3 && (
+            <Grid templateColumns={{ base: '1fr', lg: 'repeat(12, 1fr)' }} gap={4}>
+              <GridItem colSpan={{ base: 12, lg: 8 }}>
+                <TemplateEditor />
+              </GridItem>
+              <GridItem colSpan={{ base: 12, lg: 4 }}>
+                <MCPConfigHelper />
               </GridItem>
             </Grid>
           )}

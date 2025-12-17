@@ -12,7 +12,7 @@ export const TOOLS = [
         documentName: { type: 'string', description: 'Name of the document to print' },
         pages: { type: 'number', description: 'Number of pages to print' },
         color: { type: 'boolean', description: 'Print in color (true) or black & white (false)', default: false },
-        quality: { 
+        quality: {
           type: 'string',
           enum: ['draft', 'normal', 'high', 'photo'],
           description: 'Print quality setting',
@@ -41,8 +41,18 @@ export const TOOLS = [
   },
   {
     name: 'get_status',
-    description: 'Get the current status of the printer',
-    inputSchema: { type: 'object', properties: {} }
+    description: 'Get the current status of the printer. Use responseStyle to control how status messages are formatted.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        responseStyle: {
+          type: 'string',
+          enum: ['technical', 'friendly', 'minimal'],
+          description: 'Message format: technical (for programmatic use), friendly (for human users), minimal (concise)',
+          default: 'technical'
+        }
+      }
+    }
   },
   {
     name: 'get_queue',

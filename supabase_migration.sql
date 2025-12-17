@@ -74,3 +74,21 @@ CREATE POLICY "Allow public access" ON print_jobs FOR ALL USING (true);
 
 -- Optional: Drop old printer_state table if you don't need the data
 -- DROP TABLE IF EXISTS printer_state;
+
+-- Response Templates table (for LLM response customization)
+CREATE TABLE IF NOT EXISTS response_templates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  template_key text NOT NULL,
+  version integer NOT NULL DEFAULT 1,
+  name text,
+  content jsonb NOT NULL,
+  is_active boolean DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_template_key ON response_templates(template_key, version);
+CREATE INDEX IF NOT EXISTS idx_template_active ON response_templates(template_key, is_active) WHERE is_active = true;
+
+ALTER TABLE response_templates ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public access" ON response_templates;
+CREATE POLICY "Allow public access" ON response_templates FOR ALL USING (true);

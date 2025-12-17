@@ -18,7 +18,9 @@ async function getPrinter() {
     const stateManager = new StateManager();
     printerInstance = new VirtualPrinter(stateManager);
   }
-  // Critical: Update state based on elapsed time (for serverless environments)
+  // Critical: Reload state from storage to get latest updates (fixes sync with dashboard)
+  await printerInstance.reloadState();
+  // Update state based on elapsed time (for serverless environments)
   // This simulates print job progress even when the process wasn't running
   await printerInstance.updateState();
   return printerInstance;
