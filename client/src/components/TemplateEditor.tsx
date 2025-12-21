@@ -449,6 +449,19 @@ export default function TemplateEditor({ apiBase = '' }: TemplateEditorProps) {
                                 colorScheme="blue"
                             />
                         </HStack>
+
+                        {/* Ask Before Switch Toggle */}
+                        <HStack justify="space-between" align="center" p={3} bg={codeBg} borderRadius="md">
+                            <VStack align="start" spacing={0}>
+                                <Text fontSize="sm" fontWeight="medium">Ask Before Switching Printers</Text>
+                                <Text fontSize="xs" color={mutedText}>When default printer is unavailable</Text>
+                            </VStack>
+                            <Switch
+                                isChecked={askBeforeSwitch}
+                                onChange={(e) => saveAskBeforeSwitch(e.target.checked)}
+                                colorScheme="green"
+                            />
+                        </HStack>
                     </VStack>
                 </Box>
             </Box>

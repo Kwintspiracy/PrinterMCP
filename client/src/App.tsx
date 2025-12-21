@@ -16,6 +16,13 @@ import {
   TabList,
   Tab,
   Tooltip,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalCloseButton,
+  useDisclosure,
 } from '@chakra-ui/react';
 import { MoonIcon, SunIcon } from '@chakra-ui/icons';
 import { FiPrinter, FiActivity, FiBell, FiSettings, FiGitBranch, FiCode } from 'react-icons/fi';
@@ -41,6 +48,7 @@ function App() {
   const [currentLocationId, setCurrentLocationId] = useState<string>('loc-home'); // Default to Home
   const toast = useToast();
   const { colorMode, toggleColorMode } = useColorMode();
+  const { isOpen: isSettingsOpen, onOpen: onSettingsOpen, onClose: onSettingsClose } = useDisclosure();
 
   // Use ref to track selected printer ID for polling (avoids stale closure)
   const selectedPrinterIdRef = useRef<string | undefined>(undefined);
@@ -301,6 +309,7 @@ function App() {
                 <IconButton
                   aria-label="Settings"
                   icon={<FiSettings />}
+                  onClick={onSettingsOpen}
                   variant="ghost"
                   size="sm"
                 />
@@ -615,17 +624,24 @@ function App() {
           )}
 
           {activeTab === 3 && (
-            <Grid templateColumns={{ base: '1fr', lg: 'repeat(12, 1fr)' }} gap={4}>
-              <GridItem colSpan={{ base: 12, lg: 8 }}>
-                <TemplateEditor />
-              </GridItem>
-              <GridItem colSpan={{ base: 12, lg: 4 }}>
-                <Settings />
-              </GridItem>
-            </Grid>
+            <Box>
+              <TemplateEditor />
+            </Box>
           )}
         </Box>
       </Flex>
+
+      {/* Settings Modal */}
+      <Modal isOpen={isSettingsOpen} onClose={onSettingsClose} size="xl">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Settings</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <Settings />
+          </ModalBody>
+        </ModalContent>
+      </Modal>
 
       {/* CSS for pulse animation */}
       <style>
