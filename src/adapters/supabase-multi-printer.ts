@@ -63,6 +63,7 @@ export interface DbUserSettings {
   id: string;
   current_location_id?: string;
   response_style?: 'technical' | 'friendly' | 'minimal';
+  verbatim?: boolean;  // LLM should relay message exactly as written
   ask_before_switch?: boolean;  // Ask user before switching to fallback printer
   auto_switch_enabled: boolean;
   theme: string;
@@ -138,6 +139,18 @@ export class SupabaseMultiPrinterStorage {
 
     if (error) {
       console.error('Error setting ask_before_switch:', error);
+      return false;
+    }
+    return true;
+  }
+
+  async setVerbatim(verbatim: boolean): Promise<boolean> {
+    const { error } = await this.getClient()
+      .from('user_settings')
+      .upsert({ id: 'default', verbatim: verbatim });
+
+    if (error) {
+      console.error('Error setting verbatim:', error);
       return false;
     }
     return true;

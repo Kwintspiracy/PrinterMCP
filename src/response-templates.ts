@@ -9,13 +9,12 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 // Types
 // ============================================
 
-export type ResponseStyle = 'technical' | 'friendly' | 'minimal' | 'exactCopy';
+export type ResponseStyle = 'technical' | 'friendly' | 'minimal';
 
 export interface TemplateContent {
     technical: string;
     friendly: string;
     minimal: string;
-    exactCopy?: string;
     custom?: string;
 }
 

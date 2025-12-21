@@ -32,7 +32,6 @@ interface TemplateContent {
     technical: string;
     friendly: string;
     minimal: string;
-    exactCopy?: string;
 }
 
 interface TemplateVersion {
@@ -151,17 +150,18 @@ export default function TemplateEditor({ apiBase = '' }: TemplateEditorProps) {
     const [selectedKey, setSelectedKey] = useState<string>('low_ink_warning');
     const [editContent, setEditContent] = useState<TemplateContent>(DEFAULT_TEMPLATES['low_ink_warning']);
     const [versionName, setVersionName] = useState('');
-    const [previewStyle, setPreviewStyle] = useState<'technical' | 'friendly' | 'minimal' | 'exactCopy'>('friendly');
+    const [previewStyle, setPreviewStyle] = useState<'technical' | 'friendly' | 'minimal'>('friendly');
     const [previewText, setPreviewText] = useState('');
     const [loading, setLoading] = useState(false);
     const [supabaseConnected, setSupabaseConnected] = useState(false);
-    const [activeStyle, setActiveStyle] = useState<'technical' | 'friendly' | 'minimal' | 'exactCopy'>(() => {
+    const [activeStyle, setActiveStyle] = useState<'technical' | 'friendly' | 'minimal'>(() => {
         // Initialize from localStorage
         const saved = localStorage.getItem('printer-response-style');
-        return (saved as 'technical' | 'friendly' | 'minimal' | 'exactCopy') || 'technical';
+        return (saved as 'technical' | 'friendly' | 'minimal') || 'technical';
     });
     const [styleSaving, setStyleSaving] = useState(false);
     const [askBeforeSwitch, setAskBeforeSwitch] = useState(false);
+    const [verbatim, setVerbatim] = useState(false);
     const toast = useToast();
 
     const borderColor = useColorModeValue('borderLight.default', 'border.default');
@@ -188,6 +188,9 @@ export default function TemplateEditor({ apiBase = '' }: TemplateEditorProps) {
                 }
                 if (data.settings.askBeforeSwitch !== undefined) {
                     setAskBeforeSwitch(data.settings.askBeforeSwitch);
+                }
+                if (data.settings.verbatim !== undefined) {
+                    setVerbatim(data.settings.verbatim);
                 }
             }
         } catch (error) {
@@ -231,6 +234,30 @@ export default function TemplateEditor({ apiBase = '' }: TemplateEditorProps) {
             if (data.success) {
                 toast({
                     title: enabled ? 'LLM will ask before switching printers' : 'LLM will auto-switch printers',
+                    status: 'success',
+                    duration: 2000
+                });
+            }
+        } catch (error) {
+            console.warn('Could not save setting to server');
+        }
+    };
+
+    // Save verbatim preference
+    const saveVerbatim = async (enabled: boolean) => {
+        setVerbatim(enabled);
+
+        try {
+            const res = await fetch(`${apiBase}/api/settings?type=user`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ verbatim: enabled })
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast({
+                    title: enabled ? 'Verbatim mode enabled' : 'Verbatim mode disabled',
+                    description: enabled ? 'LLM will relay messages exactly as written' : 'LLM may rephrase messages',
                     status: 'success',
                     duration: 2000
                 });
@@ -365,8 +392,18 @@ export default function TemplateEditor({ apiBase = '' }: TemplateEditorProps) {
                         <option value="technical">⚙️ Technical</option>
                         <option value="friendly">😊 Friendly</option>
                         <option value="minimal">📝 Minimal</option>
-                        <option value="exactCopy">📋 Exact Copy</option>
                     </Select>
+                </HStack>
+                <HStack justify="space-between" align="center" mt={3} pt={3} borderTop="1px solid" borderColor={borderColor}>
+                    <VStack align="start" spacing={0}>
+                        <Text fontSize="sm" fontWeight="medium">Verbatim Response</Text>
+                        <Text fontSize="xs" color={mutedText}>LLM should relay message exactly as written</Text>
+                    </VStack>
+                    <Switch
+                        isChecked={verbatim}
+                        onChange={(e) => saveVerbatim(e.target.checked)}
+                        colorScheme="blue"
+                    />
                 </HStack>
                 <HStack justify="space-between" align="center" mt={3} pt={3} borderTop="1px solid" borderColor={borderColor}>
                     <VStack align="start" spacing={0}>
@@ -386,7 +423,7 @@ export default function TemplateEditor({ apiBase = '' }: TemplateEditorProps) {
                 <Text fontSize="xs" fontWeight="semibold" color={mutedText} mb={1}>HOW TO TRIGGER FROM LLM</Text>
                 <Code fontSize="xs" display="block" whiteSpace="pre" p={2} borderRadius="md">
                     {`Tool: get_status
-Params: { "responseStyle": "${activeStyle}" }`}
+Params: { "responseStyle": "${activeStyle}"${verbatim ? ', "verbatim": true' : ''} }`}
                 </Code>
             </Box>
 
@@ -436,49 +473,21 @@ Params: { "responseStyle": "${activeStyle}" }`}
                             </Select>
                         </Box>
 
-                        {/* Template Editor Tabs */}
-                        <Tabs size="sm" variant="enclosed">
-                            <TabList>
-                                <Tab>Technical</Tab>
-                                <Tab>Friendly</Tab>
-                                <Tab>Minimal</Tab>
-                            </TabList>
-                            <TabPanels>
-                                <TabPanel p={0} pt={2}>
-                                    <Textarea
-                                        size="sm"
-                                        rows={4}
-                                        value={editContent.technical}
-                                        onChange={(e) => setEditContent({ ...editContent, technical: e.target.value })}
-                                        placeholder="Technical template..."
-                                        fontFamily="mono"
-                                        fontSize="xs"
-                                    />
-                                </TabPanel>
-                                <TabPanel p={0} pt={2}>
-                                    <Textarea
-                                        size="sm"
-                                        rows={4}
-                                        value={editContent.friendly}
-                                        onChange={(e) => setEditContent({ ...editContent, friendly: e.target.value })}
-                                        placeholder="Friendly template..."
-                                        fontFamily="mono"
-                                        fontSize="xs"
-                                    />
-                                </TabPanel>
-                                <TabPanel p={0} pt={2}>
-                                    <Textarea
-                                        size="sm"
-                                        rows={4}
-                                        value={editContent.minimal}
-                                        onChange={(e) => setEditContent({ ...editContent, minimal: e.target.value })}
-                                        placeholder="Minimal template..."
-                                        fontFamily="mono"
-                                        fontSize="xs"
-                                    />
-                                </TabPanel>
-                            </TabPanels>
-                        </Tabs>
+                        {/* Template Editor - Single Style */}
+                        <Box>
+                            <Text fontSize="xs" fontWeight="semibold" color={mutedText} textTransform="uppercase" mb={2}>
+                                Editing: {activeStyle.charAt(0).toUpperCase() + activeStyle.slice(1)} Template
+                            </Text>
+                            <Textarea
+                                size="sm"
+                                rows={4}
+                                value={editContent[activeStyle] || ''}
+                                onChange={(e) => setEditContent({ ...editContent, [activeStyle]: e.target.value })}
+                                placeholder={`${activeStyle} template...`}
+                                fontFamily="mono"
+                                fontSize="xs"
+                            />
+                        </Box>
 
                         <Text fontSize="xs" color={mutedText}>
                             Use <Code fontSize="xs" bg={codeBg}>${'{'}variable{'}'}</Code> for dynamic values
@@ -489,22 +498,22 @@ Params: { "responseStyle": "${activeStyle}" }`}
                             <HStack mb={2}>
                                 <Icon as={FiEye} boxSize={3} color={mutedText} />
                                 <Text fontSize="xs" fontWeight="semibold" color={mutedText} textTransform="uppercase">
-                                    Preview
+                                    Preview ({activeStyle})
                                 </Text>
-                                <Select
-                                    size="xs"
-                                    w="auto"
-                                    value={previewStyle}
-                                    onChange={(e) => setPreviewStyle(e.target.value as any)}
-                                >
-                                    <option value="technical">Technical</option>
-                                    <option value="friendly">Friendly</option>
-                                    <option value="minimal">Minimal</option>
-                                    <option value="exactCopy">Exact Copy</option>
-                                </Select>
                             </HStack>
                             <Box p={3} bg={codeBg} borderRadius="md" fontSize="sm">
-                                {previewText || <Text color={mutedText} fontStyle="italic">No preview available</Text>}
+                                {editContent[activeStyle] ? (
+                                    (() => {
+                                        const variables = SAMPLE_VARIABLES[selectedKey] || {};
+                                        let preview = editContent[activeStyle] || '';
+                                        Object.entries(variables).forEach(([key, value]) => {
+                                            preview = preview.replace(new RegExp(`\\$\\{${key}\\}`, 'g'), String(value));
+                                        });
+                                        return preview;
+                                    })()
+                                ) : (
+                                    <Text color={mutedText} fontStyle="italic">No preview available</Text>
+                                )}
                             </Box>
                         </Box>
 

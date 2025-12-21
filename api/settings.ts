@@ -99,6 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           settings: {
             currentLocationId: settings?.current_location_id,
             responseStyle: settings?.response_style ?? 'technical',
+            verbatim: settings?.verbatim ?? false,
             askBeforeSwitch: settings?.ask_before_switch ?? false,
             autoSwitchEnabled: settings?.auto_switch_enabled ?? true,
             theme: settings?.theme ?? 'dark'
@@ -126,7 +127,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (req.method === 'PUT') {
-        const { currentLocationId, responseStyle, askBeforeSwitch } = req.body;
+        const { currentLocationId, responseStyle, askBeforeSwitch, verbatim } = req.body;
 
         // Handle responseStyle update
         if (responseStyle) {
@@ -170,8 +171,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
         }
 
-        if (!currentLocationId && !responseStyle && askBeforeSwitch === undefined) {
-          return res.status(400).json({ success: false, error: 'currentLocationId, responseStyle, or askBeforeSwitch required' });
+        // Handle verbatim update
+        if (verbatim !== undefined) {
+          const success = await storage.setVerbatim(verbatim);
+          if (!success) {
+            return res.status(500).json({ success: false, error: 'Failed to update verbatim' });
+          }
+
+          // If only updating verbatim, return early
+          if (!currentLocationId && !responseStyle && askBeforeSwitch === undefined) {
+            return res.status(200).json({
+              success: true,
+              message: `Verbatim ${verbatim ? 'enabled' : 'disabled'}`,
+              settings: { verbatim }
+            });
+          }
+        }
+
+        if (!currentLocationId && !responseStyle && askBeforeSwitch === undefined && verbatim === undefined) {
+          return res.status(400).json({ success: false, error: 'currentLocationId, responseStyle, askBeforeSwitch, or verbatim required' });
         }
 
         // If we have a location to update, continue with the existing logic

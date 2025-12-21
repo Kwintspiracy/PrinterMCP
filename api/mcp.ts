@@ -251,11 +251,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         case 'get_status': {
-          // Get user settings for response style
+          // Get user settings for response style and verbatim
           const settings = await storage.getUserSettings();
           const responseStyle = (args.responseStyle as ResponseStyle) ||
             (settings?.response_style as ResponseStyle) ||
             'technical';
+          const verbatim = args.verbatim ?? settings?.verbatim ?? false;
 
           const { printer, locationName, wasDefault, fallbackReason } = await getDefaultPrinter();
           if (!printer) {
@@ -266,70 +267,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           } else {
             const statusData = formatPrinterStatus(printer, locationName);
 
-            // For exactCopy style, return raw JSON without template formatting
-            if (responseStyle === 'exactCopy') {
-              result = {
-                ...statusData,
-                message: JSON.stringify(statusData, null, 2),
-                responseStyle,
-                _note: 'exactCopy mode: message contains raw JSON. LLM should relay this information verbatim.'
-              };
+            // Generate human-readable message using templates
+            const templateEngine = getTemplateEngine();
+            const messages: string[] = [];
+
+            // Primary status message
+            if (printer.status === 'error') {
+              messages.push(await templateEngine.format('status_error', responseStyle, {
+                errorType: 'printer_error',
+                errorMessage: 'Printer encountered an error'
+              }));
+            } else if (printer.status === 'paused') {
+              messages.push(await templateEngine.format('status_paused', responseStyle, {}));
+            } else if (printer.status === 'printing') {
+              messages.push(await templateEngine.format('status_printing', responseStyle, {
+                jobName: 'Current Job',
+                progress: 0
+              }));
             } else {
-              // Generate human-readable message using templates
-              const templateEngine = getTemplateEngine();
-              const messages: string[] = [];
+              messages.push(await templateEngine.format('status_ready', responseStyle, {}));
+            }
 
-              // Primary status message
-              if (printer.status === 'error') {
-                messages.push(await templateEngine.format('status_error', responseStyle, {
-                  errorType: 'printer_error',
-                  errorMessage: 'Printer encountered an error'
-                }));
-              } else if (printer.status === 'paused') {
-                messages.push(await templateEngine.format('status_paused', responseStyle, {}));
-              } else if (printer.status === 'printing') {
-                messages.push(await templateEngine.format('status_printing', responseStyle, {
-                  jobName: 'Current Job',
-                  progress: 0
-                }));
-              } else {
-                messages.push(await templateEngine.format('status_ready', responseStyle, {}));
-              }
+            // Add ink warnings/alerts
+            for (const color of statusData.inkStatus.depleted) {
+              messages.push(await templateEngine.format('ink_depleted', responseStyle, { color }));
+            }
+            for (const color of statusData.inkStatus.low) {
+              const level = statusData.inkLevels[color as keyof typeof statusData.inkLevels];
+              messages.push(await templateEngine.format('low_ink_warning', responseStyle, { color, level }));
+            }
 
-              // Add ink warnings/alerts
-              for (const color of statusData.inkStatus.depleted) {
-                messages.push(await templateEngine.format('ink_depleted', responseStyle, { color }));
-              }
-              for (const color of statusData.inkStatus.low) {
-                const level = statusData.inkLevels[color as keyof typeof statusData.inkLevels];
-                messages.push(await templateEngine.format('low_ink_warning', responseStyle, { color, level }));
-              }
+            // Add paper warnings
+            if (statusData.paper.count === 0) {
+              messages.push(await templateEngine.format('paper_empty', responseStyle, {}));
+            } else if (statusData.paper.count < 10) {
+              messages.push(await templateEngine.format('paper_low', responseStyle, {
+                count: statusData.paper.count,
+                capacity: statusData.paper.capacity
+              }));
+            }
 
-              // Add paper warnings
-              if (statusData.paper.count === 0) {
-                messages.push(await templateEngine.format('paper_empty', responseStyle, {}));
-              } else if (statusData.paper.count < 10) {
-                messages.push(await templateEngine.format('paper_low', responseStyle, {
-                  count: statusData.paper.count,
-                  capacity: statusData.paper.capacity
-                }));
-              }
+            // Add maintenance warning if needed
+            if (statusData.maintenanceNeeded) {
+              messages.push(await templateEngine.format('maintenance_needed', responseStyle, {
+                pageCount: 500
+              }));
+            }
 
-              // Add maintenance warning if needed
-              if (statusData.maintenanceNeeded) {
-                messages.push(await templateEngine.format('maintenance_needed', responseStyle, {
-                  pageCount: 500
-                }));
-              }
+            // Combine all messages
+            const formattedMessage = messages.join(' ');
 
-              // Combine all messages
-              const formattedMessage = messages.join(' ');
+            result = {
+              ...statusData,
+              message: formattedMessage,
+              responseStyle,
+              verbatim
+            };
 
-              result = {
-                ...statusData,
-                message: formattedMessage,
-                responseStyle
-              };
+            // Add verbatim instruction if enabled
+            if (verbatim) {
+              (result as any)._instruction = 'VERBATIM MODE: Relay the "message" field to the user exactly as written, word for word. Do not rephrase or summarize.';
             }
 
             if (!wasDefault && fallbackReason) {
