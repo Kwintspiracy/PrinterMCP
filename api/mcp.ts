@@ -267,73 +267,162 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           } else {
             const statusData = formatPrinterStatus(printer, locationName);
 
-            // Generate human-readable message using templates
-            const templateEngine = getTemplateEngine();
-            const messages: string[] = [];
+            // Check if custom format is being used
+            if (responseStyle === 'custom') {
+              const customFormat = settings?.custom_format || '{"message": "${message}"}';
 
-            // Primary status message
-            if (printer.status === 'error') {
-              messages.push(await templateEngine.format('status_error', responseStyle, {
-                errorType: 'printer_error',
-                errorMessage: 'Printer encountered an error'
-              }));
-            } else if (printer.status === 'paused') {
-              messages.push(await templateEngine.format('status_paused', responseStyle, {}));
-            } else if (printer.status === 'printing') {
-              messages.push(await templateEngine.format('status_printing', responseStyle, {
-                jobName: 'Current Job',
-                progress: 0
-              }));
+              // Generate default message first for variable substitution
+              const templateEngine = getTemplateEngine();
+              const messages: string[] = [];
+
+              // Generate messages using technical style as base
+              if (printer.status === 'error') {
+                messages.push(await templateEngine.format('status_error', 'technical', {
+                  errorType: 'printer_error',
+                  errorMessage: 'Printer encountered an error'
+                }));
+              } else if (printer.status === 'paused') {
+                messages.push(await templateEngine.format('status_paused', 'technical', {}));
+              } else if (printer.status === 'printing') {
+                messages.push(await templateEngine.format('status_printing', 'technical', {
+                  jobName: 'Current Job',
+                  progress: 0
+                }));
+              } else {
+                messages.push(await templateEngine.format('status_ready', 'technical', {}));
+              }
+
+              for (const color of statusData.inkStatus.depleted) {
+                messages.push(await templateEngine.format('ink_depleted', 'technical', { color }));
+              }
+              for (const color of statusData.inkStatus.low) {
+                const level = statusData.inkLevels[color as keyof typeof statusData.inkLevels];
+                messages.push(await templateEngine.format('low_ink_warning', 'technical', { color, level }));
+              }
+
+              if (statusData.paper.count === 0) {
+                messages.push(await templateEngine.format('paper_empty', 'technical', {}));
+              } else if (statusData.paper.count < 10) {
+                messages.push(await templateEngine.format('paper_low', 'technical', {
+                  count: statusData.paper.count,
+                  capacity: statusData.paper.capacity
+                }));
+              }
+
+              if (statusData.maintenanceNeeded) {
+                messages.push(await templateEngine.format('maintenance_needed', 'technical', {
+                  pageCount: 500
+                }));
+              }
+
+              const formattedMessage = messages.join(' ');
+
+              // Parse custom format and replace variables
+              try {
+                let customResponse = customFormat;
+
+                // Define available variables
+                const variables: Record<string, any> = {
+                  message: formattedMessage,
+                  status: printer.status,
+                  name: printer.name,
+                  inkLevels: JSON.stringify(statusData.inkLevels),
+                  paperCount: statusData.paper.count,
+                  canPrint: statusData.canPrint
+                };
+
+                // Replace ${variable} patterns
+                Object.entries(variables).forEach(([key, value]) => {
+                  const pattern = new RegExp(`\\$\\{${key}\\}`, 'g');
+                  customResponse = customResponse.replace(pattern, String(value));
+                });
+
+                // Parse as JSON and return
+                result = JSON.parse(customResponse);
+
+                // Add fallback info if needed
+                if (!wasDefault && fallbackReason) {
+                  (result as any).fallbackInfo = {
+                    usingFallback: true,
+                    reason: fallbackReason
+                  };
+                }
+              } catch (e) {
+                // If custom format fails, return error
+                result = {
+                  error: 'Invalid custom format',
+                  details: e instanceof Error ? e.message : 'Unknown error'
+                };
+              }
             } else {
-              messages.push(await templateEngine.format('status_ready', responseStyle, {}));
-            }
+              // Generate human-readable message using templates
+              const templateEngine = getTemplateEngine();
+              const messages: string[] = [];
 
-            // Add ink warnings/alerts
-            for (const color of statusData.inkStatus.depleted) {
-              messages.push(await templateEngine.format('ink_depleted', responseStyle, { color }));
-            }
-            for (const color of statusData.inkStatus.low) {
-              const level = statusData.inkLevels[color as keyof typeof statusData.inkLevels];
-              messages.push(await templateEngine.format('low_ink_warning', responseStyle, { color, level }));
-            }
+              // Primary status message
+              if (printer.status === 'error') {
+                messages.push(await templateEngine.format('status_error', responseStyle, {
+                  errorType: 'printer_error',
+                  errorMessage: 'Printer encountered an error'
+                }));
+              } else if (printer.status === 'paused') {
+                messages.push(await templateEngine.format('status_paused', responseStyle, {}));
+              } else if (printer.status === 'printing') {
+                messages.push(await templateEngine.format('status_printing', responseStyle, {
+                  jobName: 'Current Job',
+                  progress: 0
+                }));
+              } else {
+                messages.push(await templateEngine.format('status_ready', responseStyle, {}));
+              }
 
-            // Add paper warnings
-            if (statusData.paper.count === 0) {
-              messages.push(await templateEngine.format('paper_empty', responseStyle, {}));
-            } else if (statusData.paper.count < 10) {
-              messages.push(await templateEngine.format('paper_low', responseStyle, {
-                count: statusData.paper.count,
-                capacity: statusData.paper.capacity
-              }));
-            }
+              // Add ink warnings/alerts
+              for (const color of statusData.inkStatus.depleted) {
+                messages.push(await templateEngine.format('ink_depleted', responseStyle, { color }));
+              }
+              for (const color of statusData.inkStatus.low) {
+                const level = statusData.inkLevels[color as keyof typeof statusData.inkLevels];
+                messages.push(await templateEngine.format('low_ink_warning', responseStyle, { color, level }));
+              }
 
-            // Add maintenance warning if needed
-            if (statusData.maintenanceNeeded) {
-              messages.push(await templateEngine.format('maintenance_needed', responseStyle, {
-                pageCount: 500
-              }));
-            }
+              // Add paper warnings
+              if (statusData.paper.count === 0) {
+                messages.push(await templateEngine.format('paper_empty', responseStyle, {}));
+              } else if (statusData.paper.count < 10) {
+                messages.push(await templateEngine.format('paper_low', responseStyle, {
+                  count: statusData.paper.count,
+                  capacity: statusData.paper.capacity
+                }));
+              }
 
-            // Combine all messages
-            const formattedMessage = messages.join(' ');
+              // Add maintenance warning if needed
+              if (statusData.maintenanceNeeded) {
+                messages.push(await templateEngine.format('maintenance_needed', responseStyle, {
+                  pageCount: 500
+                }));
+              }
 
-            result = {
-              ...statusData,
-              message: formattedMessage,
-              responseStyle,
-              verbatim
-            };
+              // Combine all messages
+              const formattedMessage = messages.join(' ');
 
-            // Add verbatim instruction if enabled
-            if (verbatim) {
-              (result as any)._instruction = 'VERBATIM MODE: Relay the "message" field to the user exactly as written, word for word. Do not rephrase or summarize.';
-            }
-
-            if (!wasDefault && fallbackReason) {
-              (result as any).fallbackInfo = {
-                usingFallback: true,
-                reason: fallbackReason
+              result = {
+                ...statusData,
+                message: formattedMessage,
+                responseStyle,
+                verbatim
               };
+
+              // Add verbatim instruction if enabled
+              if (verbatim) {
+                (result as any)._instruction = 'VERBATIM MODE: Relay the "message" field to the user exactly as written, word for word. Do not rephrase or summarize.';
+              }
+
+              if (!wasDefault && fallbackReason) {
+                (result as any).fallbackInfo = {
+                  usingFallback: true,
+                  reason: fallbackReason
+                };
+              }
             }
           }
           break;

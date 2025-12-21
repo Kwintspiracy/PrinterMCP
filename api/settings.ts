@@ -99,6 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           settings: {
             currentLocationId: settings?.current_location_id,
             responseStyle: settings?.response_style ?? 'technical',
+            customFormat: settings?.custom_format ?? '{"message": "${message}"}',
             verbatim: settings?.verbatim ?? false,
             askBeforeSwitch: settings?.ask_before_switch ?? false,
             autoSwitchEnabled: settings?.auto_switch_enabled ?? true,
@@ -127,15 +128,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (req.method === 'PUT') {
-        const { currentLocationId, responseStyle, askBeforeSwitch, verbatim } = req.body;
+        const { currentLocationId, responseStyle, askBeforeSwitch, verbatim, customFormat } = req.body;
 
         // Handle responseStyle update
         if (responseStyle) {
-          const validStyles = ['technical', 'friendly', 'minimal'];
+          const validStyles = ['technical', 'friendly', 'minimal', 'custom'];
           if (!validStyles.includes(responseStyle)) {
             return res.status(400).json({
               success: false,
-              error: 'Invalid responseStyle. Must be: technical, friendly, or minimal'
+              error: 'Invalid responseStyle. Must be: technical, friendly, minimal, or custom'
             });
           }
 
@@ -179,7 +180,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           // If only updating verbatim, return early
-          if (!currentLocationId && !responseStyle && askBeforeSwitch === undefined) {
+          if (!currentLocationId && !responseStyle && askBeforeSwitch === undefined && !customFormat) {
             return res.status(200).json({
               success: true,
               message: `Verbatim ${verbatim ? 'enabled' : 'disabled'}`,
@@ -188,8 +189,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
         }
 
-        if (!currentLocationId && !responseStyle && askBeforeSwitch === undefined && verbatim === undefined) {
-          return res.status(400).json({ success: false, error: 'currentLocationId, responseStyle, askBeforeSwitch, or verbatim required' });
+        // Handle customFormat update
+        if (customFormat) {
+          // Validate JSON
+          try {
+            JSON.parse(customFormat);
+          } catch (e) {
+            return res.status(400).json({ success: false, error: 'Invalid JSON format' });
+          }
+
+          const success = await storage.setCustomFormat(customFormat);
+          if (!success) {
+            return res.status(500).json({ success: false, error: 'Failed to update custom format' });
+          }
+
+          // If only updating customFormat, return early
+          if (!currentLocationId && !responseStyle && askBeforeSwitch === undefined && verbatim === undefined) {
+            return res.status(200).json({
+              success: true,
+              message: 'Custom format updated',
+              settings: { customFormat }
+            });
+          }
+        }
+
+        if (!currentLocationId && !responseStyle && askBeforeSwitch === undefined && verbatim === undefined && !customFormat) {
+          return res.status(400).json({ success: false, error: 'currentLocationId, responseStyle, askBeforeSwitch, verbatim, or customFormat required' });
         }
 
         // If we have a location to update, continue with the existing logic

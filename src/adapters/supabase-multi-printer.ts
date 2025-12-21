@@ -62,7 +62,8 @@ export interface DbPrintJob {
 export interface DbUserSettings {
   id: string;
   current_location_id?: string;
-  response_style?: 'technical' | 'friendly' | 'minimal';
+  response_style?: 'technical' | 'friendly' | 'minimal' | 'custom';
+  custom_format?: string;  // JSON string for custom response format
   verbatim?: boolean;  // LLM should relay message exactly as written
   ask_before_switch?: boolean;  // Ask user before switching to fallback printer
   auto_switch_enabled: boolean;
@@ -151,6 +152,18 @@ export class SupabaseMultiPrinterStorage {
 
     if (error) {
       console.error('Error setting verbatim:', error);
+      return false;
+    }
+    return true;
+  }
+
+  async setCustomFormat(customFormat: string): Promise<boolean> {
+    const { error } = await this.getClient()
+      .from('user_settings')
+      .upsert({ id: 'default', custom_format: customFormat });
+
+    if (error) {
+      console.error('Error setting custom_format:', error);
       return false;
     }
     return true;

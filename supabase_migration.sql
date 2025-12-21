@@ -97,7 +97,9 @@ CREATE POLICY "Allow public access" ON response_templates FOR ALL USING (true);
 CREATE TABLE IF NOT EXISTS user_settings (
   id text PRIMARY KEY DEFAULT 'default',
   current_location_id text,
-  response_style text DEFAULT 'technical', -- 'technical', 'friendly', or 'minimal'
+  response_style text DEFAULT 'technical', -- 'technical', 'friendly', 'minimal', or 'custom'
+  custom_format text DEFAULT '{"message": "${message}"}', -- JSON template for custom response format
+  verbatim boolean DEFAULT false, -- LLM should relay message exactly as written
   ask_before_switch boolean DEFAULT false, -- Ask user before switching to fallback printer
   auto_switch_enabled boolean DEFAULT true,
   theme text DEFAULT 'dark',
@@ -107,6 +109,8 @@ CREATE TABLE IF NOT EXISTS user_settings (
 
 -- Add columns if table already exists
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS response_style text DEFAULT 'technical';
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS custom_format text DEFAULT '{"message": "${message}"}';
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS verbatim boolean DEFAULT false;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ask_before_switch boolean DEFAULT false;
 
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
