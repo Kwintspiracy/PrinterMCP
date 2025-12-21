@@ -30,7 +30,7 @@ import StatsPanel from './components/StatsPanel';
 import EventLog from './components/EventLog';
 import Sidebar from './components/Sidebar';
 import TemplateEditor from './components/TemplateEditor';
-import MCPConfigHelper from './components/MCPConfigHelper';
+import Settings from './components/Settings';
 
 function App() {
   const [status, setStatus] = useState<PrinterStatus | null>(null);
@@ -620,7 +620,7 @@ function App() {
                 <TemplateEditor />
               </GridItem>
               <GridItem colSpan={{ base: 12, lg: 4 }}>
-                <MCPConfigHelper />
+                <Settings />
               </GridItem>
             </Grid>
           )}

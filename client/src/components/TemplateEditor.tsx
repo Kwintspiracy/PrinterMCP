@@ -26,7 +26,7 @@ import {
     FormControl,
     FormLabel,
 } from '@chakra-ui/react';
-import { FiSave, FiRotateCcw, FiClock, FiCheck, FiEye, FiZap } from 'react-icons/fi';
+import { FiSave, FiRotateCcw, FiClock, FiCheck, FiEye, FiZap, FiCode, FiActivity } from 'react-icons/fi';
 
 interface TemplateContent {
     technical: string;
@@ -405,114 +405,78 @@ export default function TemplateEditor({ apiBase = '' }: TemplateEditorProps) {
     const selectedVersions = templates[selectedKey] || [];
 
     return (
-        <Box border="1px solid" borderColor={borderColor} borderRadius="md" bg={cardBg} overflow="hidden">
-            {/* Active Style Selector */}
-            <Box px={4} py={3} borderBottom="1px solid" borderColor={borderColor} bg="green.50" _dark={{ bg: 'green.900' }}>
-                <HStack justify="space-between" align="center">
+        <VStack spacing={6} align="stretch">
+            {/* SECTION 1: Response Configuration */}
+            <Box border="1px solid" borderColor={borderColor} borderRadius="md" bg={cardBg} overflow="hidden">
+                <Box px={4} py={3} borderBottom="1px solid" borderColor={borderColor} bg={headerBg}>
                     <HStack>
-                        <Icon as={FiZap} color="green.500" />
-                        <Text fontWeight="semibold" fontSize="sm">Active Response Style</Text>
+                        <Icon as={FiZap} color="blue.500" boxSize={4} />
+                        <Text fontWeight="bold" fontSize="md">Response Configuration</Text>
                     </HStack>
-                    <Select
-                        size="sm"
-                        w="180px"
-                        value={activeStyle}
-                        onChange={(e) => saveActiveStyle(e.target.value as any)}
-                        isDisabled={styleSaving}
-                        bg={cardBg}
-                    >
-                        <option value="technical">⚙️ Technical</option>
-                        <option value="friendly">😊 Friendly</option>
-                        <option value="minimal">📝 Minimal</option>
-                        <option value="custom">🔧 Custom Format</option>
-                    </Select>
-                </HStack>
-                <HStack justify="space-between" align="center" mt={3} pt={3} borderTop="1px solid" borderColor={borderColor}>
-                    <VStack align="start" spacing={0}>
-                        <Text fontSize="sm" fontWeight="medium">Verbatim Response</Text>
-                        <Text fontSize="xs" color={mutedText}>LLM should relay message exactly as written</Text>
-                    </VStack>
-                    <Switch
-                        isChecked={verbatim}
-                        onChange={(e) => saveVerbatim(e.target.checked)}
-                        colorScheme="blue"
-                    />
-                </HStack>
-                <HStack justify="space-between" align="center" mt={3} pt={3} borderTop="1px solid" borderColor={borderColor}>
-                    <VStack align="start" spacing={0}>
-                        <Text fontSize="sm" fontWeight="medium">Ask Before Switching Printers</Text>
-                        <Text fontSize="xs" color={mutedText}>When default printer is unavailable</Text>
-                    </VStack>
-                    <Switch
-                        isChecked={askBeforeSwitch}
-                        onChange={(e) => saveAskBeforeSwitch(e.target.checked)}
-                        colorScheme="green"
-                    />
-                </HStack>
-            </Box>
-
-            {/* LLM Trigger Guide */}
-            <Box px={4} py={2} borderBottom="1px solid" borderColor={borderColor} bg={headerBg}>
-                <Text fontSize="xs" fontWeight="semibold" color={mutedText} mb={1}>HOW TO TRIGGER FROM LLM</Text>
-                <Code fontSize="xs" display="block" whiteSpace="pre" p={2} borderRadius="md">
-                    {`Tool: get_status
-Params: { "responseStyle": "${activeStyle}"${verbatim ? ', "verbatim": true' : ''} }`}
-                </Code>
-            </Box>
-
-            {/* Header */}
-            <Box px={4} py={3} borderBottom="1px solid" borderColor={borderColor} bg={headerBg}>
-                <Text fontWeight="semibold" fontSize="sm">Template Editor</Text>
-                <Text fontSize="xs" color={mutedText}>Edit the text templates for each printer condition</Text>
-            </Box>
-
-            <Flex>
-                {/* Template Selector & Editor */}
-                <Box flex={2} p={4} borderRight="1px solid" borderColor={borderColor}>
+                    <Text fontSize="xs" color={mutedText} mt={1}>
+                        Configure how the LLM receives status messages
+                    </Text>
+                </Box>
+                <Box p={4}>
                     <VStack spacing={4} align="stretch">
-                        {/* Template Key Selector */}
-                        <Box>
-                            <Text fontSize="xs" fontWeight="semibold" color={mutedText} textTransform="uppercase" mb={2}>
-                                Select Template to Edit
-                            </Text>
-                            <Text fontSize="xs" color={mutedText} mb={2}>
-                                Each template controls how the LLM describes a specific printer condition.
-                            </Text>
+                        {/* Active Style Dropdown */}
+                        <FormControl>
+                            <FormLabel fontSize="sm" fontWeight="semibold" mb={1}>
+                                Active Response Style
+                            </FormLabel>
                             <Select
                                 size="sm"
-                                value={selectedKey}
-                                onChange={(e) => handleKeyChange(e.target.value)}
+                                value={activeStyle}
+                                onChange={(e) => saveActiveStyle(e.target.value as any)}
+                                isDisabled={styleSaving}
                             >
-                                <optgroup label="Status Messages">
-                                    <option value="status_ready">Status: Ready</option>
-                                    <option value="status_printing">Status: Printing</option>
-                                    <option value="status_paused">Status: Paused</option>
-                                    <option value="status_error">Status: Error</option>
-                                </optgroup>
-                                <optgroup label="Ink Alerts">
-                                    <option value="low_ink_warning">Low Ink Warning</option>
-                                    <option value="ink_depleted">Ink Depleted</option>
-                                </optgroup>
-                                <optgroup label="Paper Alerts">
-                                    <option value="paper_low">Paper Low</option>
-                                    <option value="paper_empty">Paper Empty</option>
-                                    <option value="paper_jam">Paper Jam</option>
-                                </optgroup>
-                                <optgroup label="Jobs & Maintenance">
-                                    <option value="job_completed">Job Completed</option>
-                                    <option value="job_failed">Job Failed</option>
-                                    <option value="maintenance_needed">Maintenance Needed</option>
-                                </optgroup>
+                                <option value="technical">⚙️ Technical</option>
+                                <option value="friendly">😊 Friendly</option>
+                                <option value="minimal">📝 Minimal</option>
+                                <option value="custom">🔧 Custom Format</option>
                             </Select>
-                        </Box>
+                        </FormControl>
 
-                        {/* Conditional Editor - Custom Format vs Templates */}
+                        {/* Verbatim Toggle */}
+                        <HStack justify="space-between" align="center" p={3} bg={codeBg} borderRadius="md">
+                            <VStack align="start" spacing={0}>
+                                <Text fontSize="sm" fontWeight="medium">Verbatim Response</Text>
+                                <Text fontSize="xs" color={mutedText}>LLM should relay message exactly as written</Text>
+                            </VStack>
+                            <Switch
+                                isChecked={verbatim}
+                                onChange={(e) => saveVerbatim(e.target.checked)}
+                                colorScheme="blue"
+                            />
+                        </HStack>
+                    </VStack>
+                </Box>
+            </Box>
+
+            {/* SECTION 2: Template/Format Editor */}
+            <Box border="1px solid" borderColor={borderColor} borderRadius="md" bg={cardBg} overflow="hidden">
+                <Box px={4} py={3} borderBottom="1px solid" borderColor={borderColor} bg={headerBg}>
+                    <HStack>
+                        <Icon as={FiCode} color="purple.500" boxSize={4} />
+                        <Text fontWeight="bold" fontSize="md">
+                            {activeStyle === 'custom' ? 'Custom Format Editor' : 'Template Editor'}
+                        </Text>
+                    </HStack>
+                    <Text fontSize="xs" color={mutedText} mt={1}>
+                        {activeStyle === 'custom'
+                            ? 'Define your own JSON response structure'
+                            : `Edit templates for ${activeStyle} style`}
+                    </Text>
+                </Box>
+
+                <Box p={4}>
+                    <VStack spacing={4} align="stretch">
                         {activeStyle === 'custom' ? (
                             <>
                                 {/* Custom Format JSON Editor */}
                                 <Box>
                                     <HStack mb={2} justify="space-between">
-                                        <Text fontSize="xs" fontWeight="semibold" color={mutedText} textTransform="uppercase">
+                                        <Text fontSize="sm" fontWeight="semibold">
                                             Custom JSON Format
                                         </Text>
                                         <Select size="xs" w="auto" onChange={(e) => setCustomFormat(e.target.value)}>
@@ -547,23 +511,20 @@ Params: { "responseStyle": "${activeStyle}"${verbatim ? ', "verbatim": true' : '
                                     <HStack mb={2}>
                                         <Icon as={FiEye} boxSize={3} color={mutedText} />
                                         <Text fontSize="xs" fontWeight="semibold" color={mutedText} textTransform="uppercase">
-                                            Custom Format Preview
+                                            Preview
                                         </Text>
                                     </HStack>
                                     <Box p={3} bg={codeBg} borderRadius="md" fontSize="sm">
                                         {(() => {
                                             try {
-                                                const variables = SAMPLE_VARIABLES[selectedKey] || {};
-                                                const sampleMessage = "PRINTER_STATUS: READY. All systems operational. INK_WARNING: yellow cartridge at 9%. Replacement recommended.";
+                                                const sampleMessage = "PRINTER_STATUS: READY. All systems operational. INK_WARNING: yellow at 9%.";
                                                 let preview = customFormat;
-                                                // Replace variables
                                                 preview = preview.replace(/\$\{message\}/g, sampleMessage);
                                                 preview = preview.replace(/\$\{status\}/g, 'ready');
                                                 preview = preview.replace(/\$\{name\}/g, 'HP ENVY 6055e');
                                                 preview = preview.replace(/\$\{inkLevels\}/g, '{"cyan":100,"magenta":100,"yellow":9,"black":100}');
                                                 preview = preview.replace(/\$\{paperCount\}/g, '100');
                                                 preview = preview.replace(/\$\{canPrint\}/g, 'true');
-                                                // Format JSON for display
                                                 const parsed = JSON.parse(preview);
                                                 return <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{JSON.stringify(parsed, null, 2)}</pre>;
                                             } catch (e) {
@@ -575,9 +536,39 @@ Params: { "responseStyle": "${activeStyle}"${verbatim ? ', "verbatim": true' : '
                             </>
                         ) : (
                             <>
-                                {/* Template Editor - Single Style */}
+                                {/* Template Selector */}
                                 <Box>
-                                    <Text fontSize="xs" fontWeight="semibold" color={mutedText} textTransform="uppercase" mb={2}>
+                                    <Text fontSize="sm" fontWeight="semibold" mb={2}>
+                                        Select Template
+                                    </Text>
+                                    <Select
+                                        size="sm"
+                                        value={selectedKey}
+                                        onChange={(e) => {
+                                            setSelectedKey(e.target.value);
+                                            loadTemplate(e.target.value);
+                                        }}
+                                    >
+                                        <optgroup label="Status Templates">
+                                            <option value="status_ready">Ready</option>
+                                            <option value="status_printing">Printing</option>
+                                            <option value="status_error">Error</option>
+                                            <option value="status_paused">Paused</option>
+                                        </optgroup>
+                                        <optgroup label="Warnings & Alerts">
+                                            <option value="low_ink_warning">Low Ink Warning</option>
+                                            <option value="ink_depleted">Ink Depleted</option>
+                                            <option value="paper_low">Paper Low</option>
+                                            <option value="paper_empty">Paper Empty</option>
+                                            <option value="paper_jam">Paper Jam</option>
+                                            <option value="maintenance_needed">Maintenance Needed</option>
+                                        </optgroup>
+                                    </Select>
+                                </Box>
+
+                                {/* Template Editor */}
+                                <Box>
+                                    <Text fontSize="sm" fontWeight="semibold" mb={2}>
                                         Editing: {activeStyle.charAt(0).toUpperCase() + activeStyle.slice(1)} Template
                                     </Text>
                                     <Textarea
@@ -589,11 +580,10 @@ Params: { "responseStyle": "${activeStyle}"${verbatim ? ', "verbatim": true' : '
                                         fontFamily="mono"
                                         fontSize="xs"
                                     />
+                                    <Text fontSize="xs" color={mutedText} mt={2}>
+                                        Use <Code fontSize="xs" bg={codeBg}>${'{'}variable{'}'}</Code> for dynamic values
+                                    </Text>
                                 </Box>
-
-                                <Text fontSize="xs" color={mutedText}>
-                                    Use <Code fontSize="xs" bg={codeBg}>${'{'}variable{'}'}</Code> for dynamic values
-                                </Text>
 
                                 {/* Preview */}
                                 <Box>
@@ -618,91 +608,179 @@ Params: { "responseStyle": "${activeStyle}"${verbatim ? ', "verbatim": true' : '
                                         )}
                                     </Box>
                                 </Box>
+
+                                <Divider />
+
+                                {/* Save Controls */}
+                                <HStack justify="space-between">
+                                    <Input
+                                        size="sm"
+                                        placeholder="Version name (optional)"
+                                        value={versionName}
+                                        onChange={(e) => setVersionName(e.target.value)}
+                                        w="60%"
+                                    />
+                                    <Button
+                                        size="sm"
+                                        leftIcon={<Icon as={FiSave} />}
+                                        colorScheme="blue"
+                                        onClick={handleSave}
+                                        isLoading={loading}
+                                    >
+                                        Save Template
+                                    </Button>
+                                </HStack>
+
+                                {/* Version History */}
+                                {selectedVersions.length > 0 && (
+                                    <Box>
+                                        <Text fontSize="sm" fontWeight="semibold" mb={2}>
+                                            Version History
+                                        </Text>
+                                        <VStack align="stretch" spacing={2}>
+                                            {selectedVersions.map((ver) => (
+                                                <Box
+                                                    key={ver.id}
+                                                    p={2}
+                                                    borderRadius="md"
+                                                    border="1px solid"
+                                                    borderColor={ver.is_active ? 'green.500' : borderColor}
+                                                    bg={ver.is_active ? 'green.50' : undefined}
+                                                    _dark={{ bg: ver.is_active ? 'green.900' : undefined }}
+                                                >
+                                                    <HStack justify="space-between" align="center">
+                                                        <HStack>
+                                                            {ver.is_active && (
+                                                                <Badge size="sm" colorScheme="green" variant="solid">
+                                                                    <HStack spacing={1}>
+                                                                        <Icon as={FiCheck} boxSize={3} />
+                                                                        <Text>Active</Text>
+                                                                    </HStack>
+                                                                </Badge>
+                                                            )}
+                                                            <VStack align="start" spacing={0}>
+                                                                <Text fontSize="xs" fontWeight="semibold">
+                                                                    Version {ver.version}
+                                                                </Text>
+                                                                <Text fontSize="xs" color={mutedText}>
+                                                                    {ver.name || 'Unnamed'}
+                                                                </Text>
+                                                                <HStack fontSize="xs" color={mutedText}>
+                                                                    <Icon as={FiClock} boxSize={3} />
+                                                                    <Text>{new Date(ver.created_at).toLocaleDateString()}</Text>
+                                                                </HStack>
+                                                            </VStack>
+                                                        </HStack>
+                                                        {!ver.is_active && (
+                                                            <Button
+                                                                size="xs"
+                                                                variant="outline"
+                                                                leftIcon={<Icon as={FiRotateCcw} />}
+                                                                onClick={() => handleRevert(ver.version)}
+                                                                isLoading={loading}
+                                                            >
+                                                                Revert
+                                                            </Button>
+                                                        )}
+                                                    </HStack>
+                                                </Box>
+                                            ))}
+                                        </VStack>
+                                    </Box>
+                                )}
                             </>
                         )}
+                    </VStack>
+                </Box>
+            </Box>
+
+            {/* SECTION 3: LLM Test Guide */}
+            <Box border="1px solid" borderColor={borderColor} borderRadius="md" bg={cardBg} overflow="hidden">
+                <Box px={4} py={3} borderBottom="1px solid" borderColor={borderColor} bg={headerBg}>
+                    <HStack>
+                        <Icon as={FiActivity} color="green.500" boxSize={4} />
+                        <Text fontWeight="bold" fontSize="md">Test with Your LLM</Text>
+                    </HStack>
+                    <Text fontSize="xs" color={mutedText} mt={1}>
+                        Copy these commands to test in your LLM client
+                    </Text>
+                </Box>
+                <Box p={4}>
+                    <VStack align="stretch" spacing={3}>
+                        <Box>
+                            <Text fontSize="xs" fontWeight="semibold" color={mutedText} mb={1}>
+                                CURRENT CONFIGURATION
+                            </Text>
+                            <Code fontSize="xs" display="block" whiteSpace="pre" p={3} borderRadius="md" bg={codeBg}>
+                                {`Tool: get_status\nParams: { "responseStyle": "${activeStyle}"${verbatim ? ', "verbatim": true' : ''} }`}
+                            </Code>
+                        </Box>
 
                         <Divider />
 
-                        {/* Save Controls */}
-                        <HStack>
-                            <Input
-                                size="sm"
-                                placeholder="Version name (optional)"
-                                value={versionName}
-                                onChange={(e) => setVersionName(e.target.value)}
-                                flex={1}
-                            />
-                            <Button
-                                size="sm"
-                                colorScheme="green"
-                                leftIcon={<Icon as={FiSave} />}
-                                onClick={handleSave}
-                                isLoading={loading}
-                            >
-                                Save
-                            </Button>
-                        </HStack>
-                    </VStack>
-                </Box>
-
-                {/* Version History */}
-                <Box flex={1} p={4} maxH="500px" overflowY="auto">
-                    <Text fontSize="xs" fontWeight="semibold" color={mutedText} textTransform="uppercase" mb={3}>
-                        Version History
-                    </Text>
-                    <VStack spacing={2} align="stretch">
-                        {selectedVersions.length === 0 ? (
-                            <Text fontSize="sm" color={mutedText}>No versions yet</Text>
-                        ) : (
-                            selectedVersions.map((ver) => (
-                                <Box
-                                    key={ver.id}
-                                    p={2}
-                                    border="1px solid"
-                                    borderColor={ver.is_active ? 'green.500' : borderColor}
-                                    borderRadius="md"
-                                    bg={ver.is_active ? 'green.50' : 'transparent'}
-                                    _dark={{ bg: ver.is_active ? 'green.900' : 'transparent' }}
-                                >
-                                    <HStack justify="space-between">
-                                        <VStack align="start" spacing={0}>
-                                            <HStack>
-                                                <Text fontSize="sm" fontWeight="medium">
-                                                    v{ver.version}
-                                                </Text>
-                                                {ver.is_active && (
-                                                    <Badge colorScheme="green" size="sm">
-                                                        <Icon as={FiCheck} boxSize={3} mr={1} />
-                                                        Active
-                                                    </Badge>
-                                                )}
-                                            </HStack>
-                                            <Text fontSize="xs" color={mutedText}>
-                                                {ver.name || 'Unnamed'}
-                                            </Text>
-                                            <HStack fontSize="xs" color={mutedText}>
-                                                <Icon as={FiClock} boxSize={3} />
-                                                <Text>{new Date(ver.created_at).toLocaleDateString()}</Text>
-                                            </HStack>
-                                        </VStack>
-                                        {!ver.is_active && (
-                                            <Button
-                                                size="xs"
-                                                variant="outline"
-                                                leftIcon={<Icon as={FiRotateCcw} />}
-                                                onClick={() => handleRevert(ver.version)}
-                                                isLoading={loading}
-                                            >
-                                                Revert
-                                            </Button>
-                                        )}
+                        <Box>
+                            <Text fontSize="xs" fontWeight="semibold" color={mutedText} mb={2}>
+                                QUICK TEST COMMANDS
+                            </Text>
+                            <VStack align="stretch" spacing={2}>
+                                <HStack justify="space-between" p={2} bg={codeBg} borderRadius="md">
+                                    <Code fontSize="xs" bg="transparent">get_status</Code>
+                                    <Button
+                                        size="xs"
+                                        variant="ghost"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText('get_status');
+                                            toast({ title: 'Copied!', status: 'success', duration: 2000 });
+                                        }}
+                                    >
+                                        Copy
+                                    </Button>
+                                </HStack>
+                                <HStack justify="space-between" p={2} bg={codeBg} borderRadius="md">
+                                    <Code fontSize="xs" bg="transparent">
+                                        get_status with responseStyle: "{activeStyle}"
+                                    </Code>
+                                    <Button
+                                        size="xs"
+                                        variant="ghost"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(`get_status with responseStyle: "${activeStyle}"`);
+                                            toast({ title: 'Copied!', status: 'success', duration: 2000 });
+                                        }}
+                                    >
+                                        Copy
+                                    </Button>
+                                </HStack>
+                                {verbatim && (
+                                    <HStack justify="space-between" p={2} bg={codeBg} borderRadius="md">
+                                        <Code fontSize="xs" bg="transparent">
+                                            get_status with verbatim: true
+                                        </Code>
+                                        <Button
+                                            size="xs"
+                                            variant="ghost"
+                                            onClick={() => {
+                                                navigator.clipboard.writeText('get_status with verbatim: true');
+                                                toast({ title: 'Copied!', status: 'success', duration: 2000 });
+                                            }}
+                                        >
+                                            Copy
+                                        </Button>
                                     </HStack>
-                                </Box>
-                            ))
-                        )}
+                                )}
+                            </VStack>
+                        </Box>
                     </VStack>
                 </Box>
-            </Flex>
-        </Box>
+            </Box>
+
+            {/* Connection Status */}
+            {supabaseConnected && (
+                <Alert status="success" variant="subtle" size="sm">
+                    <AlertIcon />
+                    Connected to Supabase - templates will persist
+                </Alert>
+            )}
+        </VStack>
     );
 }
