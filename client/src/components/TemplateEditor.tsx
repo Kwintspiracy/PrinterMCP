@@ -32,6 +32,7 @@ interface TemplateContent {
     technical: string;
     friendly: string;
     minimal: string;
+    exactCopy?: string;
 }
 
 interface TemplateVersion {
@@ -150,14 +151,14 @@ export default function TemplateEditor({ apiBase = '' }: TemplateEditorProps) {
     const [selectedKey, setSelectedKey] = useState<string>('low_ink_warning');
     const [editContent, setEditContent] = useState<TemplateContent>(DEFAULT_TEMPLATES['low_ink_warning']);
     const [versionName, setVersionName] = useState('');
-    const [previewStyle, setPreviewStyle] = useState<'technical' | 'friendly' | 'minimal'>('friendly');
+    const [previewStyle, setPreviewStyle] = useState<'technical' | 'friendly' | 'minimal' | 'exactCopy'>('friendly');
     const [previewText, setPreviewText] = useState('');
     const [loading, setLoading] = useState(false);
     const [supabaseConnected, setSupabaseConnected] = useState(false);
-    const [activeStyle, setActiveStyle] = useState<'technical' | 'friendly' | 'minimal'>(() => {
+    const [activeStyle, setActiveStyle] = useState<'technical' | 'friendly' | 'minimal' | 'exactCopy'>(() => {
         // Initialize from localStorage
         const saved = localStorage.getItem('printer-response-style');
-        return (saved as 'technical' | 'friendly' | 'minimal') || 'technical';
+        return (saved as 'technical' | 'friendly' | 'minimal' | 'exactCopy') || 'technical';
     });
     const [styleSaving, setStyleSaving] = useState(false);
     const [askBeforeSwitch, setAskBeforeSwitch] = useState(false);
@@ -355,7 +356,7 @@ export default function TemplateEditor({ apiBase = '' }: TemplateEditorProps) {
                     </HStack>
                     <Select
                         size="sm"
-                        w="160px"
+                        w="180px"
                         value={activeStyle}
                         onChange={(e) => saveActiveStyle(e.target.value as any)}
                         isDisabled={styleSaving}
@@ -364,6 +365,7 @@ export default function TemplateEditor({ apiBase = '' }: TemplateEditorProps) {
                         <option value="technical">⚙️ Technical</option>
                         <option value="friendly">😊 Friendly</option>
                         <option value="minimal">📝 Minimal</option>
+                        <option value="exactCopy">📋 Exact Copy</option>
                     </Select>
                 </HStack>
                 <HStack justify="space-between" align="center" mt={3} pt={3} borderTop="1px solid" borderColor={borderColor}>
@@ -498,6 +500,7 @@ Params: { "responseStyle": "${activeStyle}" }`}
                                     <option value="technical">Technical</option>
                                     <option value="friendly">Friendly</option>
                                     <option value="minimal">Minimal</option>
+                                    <option value="exactCopy">Exact Copy</option>
                                 </Select>
                             </HStack>
                             <Box p={3} bg={codeBg} borderRadius="md" fontSize="sm">
