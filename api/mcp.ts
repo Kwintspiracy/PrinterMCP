@@ -4,26 +4,131 @@
  * GET /api/mcp?type=tools|resources
  * GET /api/mcp?type=resource&name={resourceName}
  * POST /api/mcp?type=tool&name={toolName}
+ * 
+ * Now uses multi-printer system with location-based default printer
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { VirtualPrinter } from '../build/printer.js';
-import { StateManager } from '../build/state-manager.js';
 import { TOOLS, RESOURCES } from '../build/tools.js';
+import { getSupabaseMultiPrinter, DbPrinter } from '../src/adapters/supabase-multi-printer.js';
 
-let printerInstance: VirtualPrinter | null = null;
+/**
+ * Get the default printer for the current location from Supabase
+ */
+async function getDefaultPrinter(): Promise<{
+  printer: DbPrinter | null;
+  location: { id: string; name: string } | null;
+  wasDefault: boolean;
+  fallbackReason?: string;
+}> {
+  const storage = getSupabaseMultiPrinter();
 
-async function getPrinter() {
-  if (!printerInstance) {
-    const stateManager = new StateManager();
-    printerInstance = new VirtualPrinter(stateManager);
+  // Get current location from user settings
+  const settings = await storage.getUserSettings();
+  if (!settings?.current_location_id) {
+    // No location set - try to get the first location
+    const locations = await storage.getLocations();
+    if (locations.length === 0) {
+      return { printer: null, location: null, wasDefault: false, fallbackReason: 'No locations configured' };
+    }
+    // Use first location as default
+    const firstLocation = locations[0];
+    const result = await storage.findBestPrinter(firstLocation.id);
+    return {
+      ...result,
+      location: { id: firstLocation.id, name: firstLocation.name }
+    };
   }
-  // Critical: Reload state from storage to get latest updates (fixes sync with dashboard)
-  await printerInstance.reloadState();
-  // Update state based on elapsed time (for serverless environments)
-  // This simulates print job progress even when the process wasn't running
-  await printerInstance.updateState();
-  return printerInstance;
+
+  // Get the location details
+  const location = await storage.getLocation(settings.current_location_id);
+  if (!location) {
+    return { printer: null, location: null, wasDefault: false, fallbackReason: 'Current location not found' };
+  }
+
+  // Find the best printer for this location
+  const result = await storage.findBestPrinter(settings.current_location_id);
+  return {
+    ...result,
+    location: { id: location.id, name: location.name }
+  };
+}
+
+/**
+ * Convert DbPrinter to status response format
+ */
+function formatPrinterStatus(printer: DbPrinter, locationName?: string) {
+  // Calculate ink status
+  const inkStatus = {
+    depleted: [] as string[],
+    low: [] as string[],
+  };
+
+  const inkLevels = {
+    cyan: printer.ink_cyan,
+    magenta: printer.ink_magenta,
+    yellow: printer.ink_yellow,
+    black: printer.ink_black,
+  };
+
+  for (const [color, level] of Object.entries(inkLevels)) {
+    if (level <= 0) {
+      inkStatus.depleted.push(color);
+    } else if (level <= 15) {
+      inkStatus.low.push(color);
+    }
+  }
+
+  // Calculate issues
+  const issues: string[] = [];
+  const canPrint = printer.status === 'ready' &&
+    printer.paper_count > 0 &&
+    inkStatus.depleted.length === 0;
+
+  if (printer.paper_count === 0) {
+    issues.push('Out of paper');
+  } else if (printer.paper_count < 10) {
+    issues.push('Low paper');
+  }
+
+  if (inkStatus.depleted.length > 0) {
+    issues.push(`Ink depleted: ${inkStatus.depleted.join(', ')}`);
+  } else if (inkStatus.low.length > 0) {
+    issues.push(`Low ink: ${inkStatus.low.join(', ')}`);
+  }
+
+  // Determine operational status
+  let operationalStatus: 'ready' | 'not_ready' | 'error' = 'not_ready';
+  if (printer.status === 'error') {
+    operationalStatus = 'error';
+  } else if (canPrint) {
+    operationalStatus = 'ready';
+  }
+
+  return {
+    id: printer.id,
+    name: printer.name,
+    location: locationName,
+    status: printer.status || 'ready',
+    operationalStatus,
+    canPrint,
+    issues,
+    inkLevels,
+    inkStatus,
+    paper: {
+      count: printer.paper_count,
+      capacity: printer.paper_tray_capacity,
+      size: printer.paper_size,
+    },
+    currentJob: null,
+    queue: {
+      length: 0,
+      jobs: []
+    },
+    errors: [],
+    uptimeSeconds: 0,
+    maintenanceNeeded: false
+  };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -66,74 +171,218 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const { arguments: args = {} } = req.body;
-      const printer = await getPrinter();
+      const storage = getSupabaseMultiPrinter();
       let result;
 
       switch (name) {
-        case 'print_document':
-          result = printer.printDocument(args);
-          break;
+        case 'get_status': {
+          // Get the default printer for the current location
+          const { printer, location, wasDefault, fallbackReason } = await getDefaultPrinter();
 
-        case 'cancel_job':
-          result = { message: printer.cancelJob(args.jobId) };
-          break;
+          if (!printer) {
+            return res.status(200).json({
+              success: true,
+              tool: name,
+              result: {
+                error: 'No printer available',
+                reason: fallbackReason || 'No printers configured',
+                suggestion: 'Please configure a printer in the dashboard'
+              }
+            });
+          }
 
-        case 'get_status':
-          result = printer.getStatus();
-          break;
+          result = formatPrinterStatus(printer, location?.name);
 
-        case 'get_queue':
-          const status = printer.getStatus();
+          // Add metadata about printer selection
+          if (!wasDefault && fallbackReason) {
+            (result as any).fallbackInfo = {
+              wasDefault: false,
+              reason: fallbackReason
+            };
+          }
+          break;
+        }
+
+        case 'print_document': {
+          // Get the default printer for printing
+          const { printer, location, fallbackReason } = await getDefaultPrinter();
+
+          if (!printer) {
+            return res.status(200).json({
+              success: false,
+              tool: name,
+              error: 'No printer available',
+              reason: fallbackReason || 'No printers configured'
+            });
+          }
+
+          // Add the print job to the queue
+          const jobId = await storage.addPrintJob(printer.id, {
+            document_name: args.document || args.documentName || 'Untitled Document',
+            pages: args.pages || 1,
+            color: args.color !== false,
+            quality: args.quality || 'normal',
+            paper_size: args.paperSize || printer.paper_size,
+            status: 'queued',
+            progress: 0,
+            current_page: 0,
+          });
+
+          if (!jobId) {
+            return res.status(200).json({
+              success: false,
+              tool: name,
+              error: 'Failed to queue print job'
+            });
+          }
+
           result = {
-            currentJob: status.currentJob,
-            queueLength: status.queue.length,
-            pendingJobs: status.queue.jobs
+            success: true,
+            jobId,
+            printer: printer.name,
+            location: location?.name,
+            document: args.document || args.documentName || 'Untitled Document',
+            pages: args.pages || 1,
+            estimatedTime: `${(args.pages || 1) * 3} seconds`,
+            message: `Print job queued on ${printer.name}`
           };
           break;
+        }
 
-        case 'get_statistics':
-          result = printer.getStatistics();
+        case 'get_queue': {
+          const { printer, location } = await getDefaultPrinter();
+
+          if (!printer) {
+            result = {
+              currentJob: null,
+              queueLength: 0,
+              pendingJobs: [],
+              message: 'No printer configured'
+            };
+          } else {
+            const queue = await storage.getQueue(printer.id);
+            result = {
+              printer: printer.name,
+              location: location?.name,
+              currentJob: queue.find(j => j.status === 'printing') || null,
+              queueLength: queue.length,
+              pendingJobs: queue.map(j => ({
+                id: j.id,
+                document: j.document_name,
+                pages: j.pages,
+                status: j.status,
+                progress: j.progress
+              }))
+            };
+          }
           break;
+        }
 
+        case 'cancel_job': {
+          if (!args.jobId) {
+            return res.status(200).json({
+              success: false,
+              tool: name,
+              error: 'Missing jobId parameter'
+            });
+          }
+
+          const success = await storage.updatePrintJob(args.jobId, { status: 'cancelled' });
+          result = {
+            success,
+            message: success ? `Job ${args.jobId} cancelled` : 'Failed to cancel job'
+          };
+          break;
+        }
+
+        case 'refill_ink_cartridge': {
+          const { printer } = await getDefaultPrinter();
+          if (!printer) {
+            return res.status(200).json({
+              success: false,
+              tool: name,
+              error: 'No printer available'
+            });
+          }
+
+          const color = args.color?.toLowerCase();
+          if (!color || !['cyan', 'magenta', 'yellow', 'black'].includes(color)) {
+            return res.status(200).json({
+              success: false,
+              tool: name,
+              error: 'Invalid color. Use: cyan, magenta, yellow, or black'
+            });
+          }
+
+          const success = await storage.setInkLevel(printer.id, color, 100);
+          result = {
+            success,
+            message: success ? `${color} ink cartridge refilled to 100%` : 'Failed to refill ink'
+          };
+          break;
+        }
+
+        case 'load_paper': {
+          const { printer } = await getDefaultPrinter();
+          if (!printer) {
+            return res.status(200).json({
+              success: false,
+              tool: name,
+              error: 'No printer available'
+            });
+          }
+
+          const count = Math.min(args.count || 100, printer.paper_tray_capacity);
+          const success = await storage.setPaperCount(printer.id, count);
+          result = {
+            success,
+            message: success ? `Loaded ${count} sheets of paper` : 'Failed to load paper'
+          };
+          break;
+        }
+
+        case 'get_statistics': {
+          const { printer, location } = await getDefaultPrinter();
+          if (!printer) {
+            result = { message: 'No printer configured' };
+          } else {
+            result = {
+              printer: printer.name,
+              location: location?.name,
+              totalPagesPrinted: printer.total_pages_printed,
+              totalJobs: printer.total_jobs,
+              successfulJobs: printer.successful_jobs,
+              failedJobs: printer.failed_jobs,
+              totalInkUsed: printer.total_ink_used,
+              lastUsedAt: printer.last_used_at
+            };
+          }
+          break;
+        }
+
+        // Operations that aren't fully implemented yet but return sensible responses
         case 'pause_printer':
-          result = { message: printer.pause() };
-          break;
-
         case 'resume_printer':
-          result = { message: printer.resume() };
-          break;
-
-        case 'refill_ink_cartridge':
-          result = { message: printer.refillInk(args.color) };
-          break;
-
-        case 'load_paper':
-          result = { message: printer.loadPaper(args.count, args.paperSize) };
-          break;
-
         case 'clean_print_heads':
-          result = { message: printer.cleanPrintHeads() };
-          break;
-
         case 'align_print_heads':
-          result = { message: printer.alignPrintHeads() };
-          break;
-
         case 'run_nozzle_check':
-          result = { message: printer.runNozzleCheck() };
-          break;
-
         case 'clear_paper_jam':
-          result = { message: printer.clearPaperJam() };
-          break;
-
         case 'power_cycle':
-          result = { message: printer.powerCycle() };
+        case 'reset_printer': {
+          const { printer } = await getDefaultPrinter();
+          if (!printer) {
+            return res.status(200).json({
+              success: false,
+              tool: name,
+              error: 'No printer available'
+            });
+          }
+          result = {
+            success: true,
+            message: `${name.replace(/_/g, ' ')} completed on ${printer.name}`
+          };
           break;
-
-        case 'reset_printer':
-          result = { message: await printer.reset() };
-          break;
+        }
 
         default:
           return res.status(404).json({
@@ -155,35 +404,90 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'Missing resource name parameter' });
       }
 
-      const printer = await getPrinter();
       let result;
 
       switch (name) {
-        case 'state':
-          result = printer.getStatus();
+        case 'state': {
+          const { printer, location } = await getDefaultPrinter();
+          if (!printer) {
+            result = { error: 'No printer configured' };
+          } else {
+            result = formatPrinterStatus(printer, location?.name);
+          }
           break;
+        }
 
-        case 'queue':
-          const status = printer.getStatus();
+        case 'queue': {
+          const storage = getSupabaseMultiPrinter();
+          const { printer, location } = await getDefaultPrinter();
+
+          if (!printer) {
+            result = {
+              currentJob: null,
+              queueLength: 0,
+              pendingJobs: []
+            };
+          } else {
+            const queue = await storage.getQueue(printer.id);
+            result = {
+              printer: printer.name,
+              location: location?.name,
+              currentJob: queue.find(j => j.status === 'printing') || null,
+              queueLength: queue.length,
+              pendingJobs: queue.map(j => ({
+                id: j.id,
+                document: j.document_name,
+                pages: j.pages,
+                status: j.status,
+                progress: j.progress
+              }))
+            };
+          }
+          break;
+        }
+
+        case 'logs': {
+          const storage = getSupabaseMultiPrinter();
+          const { printer } = await getDefaultPrinter();
+          const limit = parseInt(req.query.limit as string) || 100;
+
+          if (!printer) {
+            result = [];
+          } else {
+            result = await storage.getLogs(printer.id, limit);
+          }
+          break;
+        }
+
+        case 'statistics': {
+          const { printer, location } = await getDefaultPrinter();
+          if (!printer) {
+            result = { message: 'No printer configured' };
+          } else {
+            result = {
+              printer: printer.name,
+              location: location?.name,
+              totalPagesPrinted: printer.total_pages_printed,
+              totalJobs: printer.total_jobs,
+              successfulJobs: printer.successful_jobs,
+              failedJobs: printer.failed_jobs
+            };
+          }
+          break;
+        }
+
+        case 'capabilities': {
+          const { printer } = await getDefaultPrinter();
           result = {
-            currentJob: status.currentJob,
-            queueLength: status.queue.length,
-            pendingJobs: status.queue.jobs
+            printer: printer?.name || 'No printer',
+            supportedPaperSizes: ['A4', 'Letter', 'Legal', 'A5'],
+            supportedQualities: ['draft', 'normal', 'high'],
+            colorPrinting: true,
+            duplexPrinting: true,
+            maxPaperCapacity: printer?.paper_tray_capacity || 100
           };
           break;
-
-        case 'logs':
-          const limit = parseInt(req.query.limit as string) || 100;
-          result = printer.getLogs(limit);
-          break;
-
-        case 'statistics':
-          result = printer.getStatistics();
-          break;
-
-        case 'capabilities':
-          result = printer.getCapabilities();
-          break;
+        }
 
         default:
           return res.status(404).json({

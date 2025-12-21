@@ -195,41 +195,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(status);
     }
 
-    // Legacy single-printer mode
-    console.log('[StatusAPI] Fetching single printer status (legacy mode)...');
-    const printer = await getPrinter();
+    // Legacy single-printer mode - now uses multi-printer system with current location's default
+    console.log('[StatusAPI] No printerId provided, using current location default printer...');
 
-    const status = printer.getStatus() as any;
-    console.log('[StatusAPI] Status retrieved:', {
-      printerState: status.status,
+    const getMultiPrinterManager = await loadMultiPrinterManager();
+    const manager = getMultiPrinterManager();
+    await manager.initialize();
+
+    // Get the default printer for the current location
+    const defaultResult = manager.getDefaultPrinter();
+
+    if (!defaultResult) {
+      // No default printer - try to get any printer
+      const allPrinters = await manager.getAllPrinters();
+      if (allPrinters.length === 0) {
+        return res.status(200).json({
+          error: 'No printers configured',
+          suggestion: 'Please add a printer in the dashboard',
+          status: 'not_ready',
+          operationalStatus: 'not_ready',
+          canPrint: false,
+          issues: ['No printers configured'],
+          inkLevels: { cyan: 0, magenta: 0, yellow: 0, black: 0 },
+          paper: { count: 0, capacity: 100, size: 'A4' },
+          currentJob: null,
+          queue: { length: 0, jobs: [] },
+          errors: [],
+          uptimeSeconds: 0,
+          maintenanceNeeded: false
+        });
+      }
+
+      // Use first available printer
+      const firstPrinter = allPrinters[0];
+      const status = await convertToPrinterStatus(firstPrinter);
+
+      console.log('[StatusAPI] Using first available printer:', {
+        printerId: status.id,
+        name: status.name
+      });
+
+      return res.status(200).json(status);
+    }
+
+    const status = await convertToPrinterStatus(defaultResult);
+
+    console.log('[StatusAPI] Using default printer:', {
+      printerId: status.id,
+      name: status.name,
+      status: status.status,
       operationalStatus: status.operationalStatus,
-      canPrint: status.canPrint,
-      issuesCount: status.issues?.length || 0
     });
-
-    // Ensure the response has the correct structure with proper fallbacks
-    const safeStatus = {
-      name: status.name || 'Virtual Inkjet Pro',
-      status: status.status || 'initializing',
-      operationalStatus: status.operationalStatus || 'not_ready',
-      canPrint: status.canPrint !== undefined ? status.canPrint : false,
-      issues: status.issues || [],
-      inkLevels: status.inkLevels || { cyan: 0, magenta: 0, yellow: 0, black: 0 },
-      paper: status.paper || { count: 0, capacity: 100, size: 'A4' },
-      currentJob: status.currentJob || null,
-      queue: {
-        length: status.queue?.length || 0,
-        jobs: status.queue?.jobs || []
-      },
-      errors: status.errors || [],
-      uptimeSeconds: status.uptimeSeconds || 0,
-      maintenanceNeeded: status.maintenanceNeeded || false
-    };
 
     // Add debug info if requested
     if (req.query.debug === 'true') {
-      (safeStatus as any).debug = {
-        mode: 'single-printer',
+      (status as any).debug = {
+        mode: 'multi-printer-default',
         isServerless: !!(process.env.VERCEL || process.env.STORAGE_TYPE === 'vercel-kv'),
         storageType: process.env.STORAGE_TYPE || 'file',
         hasVercelEnv: !!process.env.VERCEL,
@@ -237,7 +258,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
     }
 
-    return res.status(200).json(safeStatus);
+    return res.status(200).json(status);
+
   } catch (error) {
     console.error('Error getting printer status:', error);
     return res.status(500).json({
@@ -245,7 +267,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       message: error instanceof Error ? error.message : String(error),
       // Return a safe default status on error
       fallback: {
-        name: 'Virtual Inkjet Pro',
+        name: 'Unknown Printer',
         status: 'error',
         inkLevels: { cyan: 0, magenta: 0, yellow: 0, black: 0 },
         paper: { count: 0, capacity: 100, size: 'A4' },
