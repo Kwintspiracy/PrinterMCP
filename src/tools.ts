@@ -5,7 +5,7 @@
 export const TOOLS = [
   {
     name: 'print_document',
-    description: 'Submit a print job to the virtual printer. Returns job ID and estimated completion time.',
+    description: 'Submit a print job to the virtual printer. Uses smart routing to find the best available printer. Returns job ID and estimated completion time.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -23,6 +23,19 @@ export const TOOLS = [
           enum: ['A4', 'Letter', 'Legal', 'A3', '4x6'],
           description: 'Paper size',
           default: 'A4'
+        },
+        locationId: {
+          type: 'string',
+          description: 'Location ID to find printer (uses default location if not specified)'
+        },
+        printerId: {
+          type: 'string',
+          description: 'Specific printer ID (skips smart routing if provided)'
+        },
+        confirmedFallback: {
+          type: 'boolean',
+          description: 'Set to true if user confirmed using a fallback printer',
+          default: false
         }
       },
       required: ['documentName', 'pages']

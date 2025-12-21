@@ -14,7 +14,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
+
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -82,13 +82,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // GET - Get user settings with location details
       if (req.method === 'GET') {
         const settings = await storage.getUserSettings();
-        
+
         let currentLocation = null;
         let defaultPrinter = null;
 
         if (settings?.current_location_id) {
           currentLocation = await storage.getLocation(settings.current_location_id);
-          
+
           if (currentLocation?.default_printer_id) {
             defaultPrinter = await storage.getPrinter(currentLocation.default_printer_id);
           }
@@ -98,6 +98,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           success: true,
           settings: {
             currentLocationId: settings?.current_location_id,
+            responseStyle: settings?.response_style ?? 'technical',
+            askBeforeSwitch: settings?.ask_before_switch ?? false,
             autoSwitchEnabled: settings?.auto_switch_enabled ?? true,
             theme: settings?.theme ?? 'dark'
           },
@@ -123,58 +125,103 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      // PUT - Update user settings (change location)
       if (req.method === 'PUT') {
-        const { currentLocationId } = req.body;
+        const { currentLocationId, responseStyle, askBeforeSwitch } = req.body;
 
-        if (!currentLocationId) {
-          return res.status(400).json({ success: false, error: 'currentLocationId required' });
+        // Handle responseStyle update
+        if (responseStyle) {
+          const validStyles = ['technical', 'friendly', 'minimal'];
+          if (!validStyles.includes(responseStyle)) {
+            return res.status(400).json({
+              success: false,
+              error: 'Invalid responseStyle. Must be: technical, friendly, or minimal'
+            });
+          }
+
+          const success = await storage.setResponseStyle(responseStyle);
+          if (!success) {
+            return res.status(500).json({ success: false, error: 'Failed to update response style' });
+          }
+
+          // If only updating responseStyle, return early
+          if (!currentLocationId && askBeforeSwitch === undefined) {
+            return res.status(200).json({
+              success: true,
+              message: `Response style set to ${responseStyle}`,
+              settings: { responseStyle }
+            });
+          }
         }
 
-        // Verify location exists
-        const location = await storage.getLocation(currentLocationId);
-        if (!location) {
-          return res.status(404).json({ success: false, error: 'Location not found' });
+        // Handle askBeforeSwitch update
+        if (askBeforeSwitch !== undefined) {
+          const success = await storage.setAskBeforeSwitch(askBeforeSwitch);
+          if (!success) {
+            return res.status(500).json({ success: false, error: 'Failed to update askBeforeSwitch' });
+          }
+
+          // If only updating askBeforeSwitch, return early
+          if (!currentLocationId && !responseStyle) {
+            return res.status(200).json({
+              success: true,
+              message: `Ask before switch ${askBeforeSwitch ? 'enabled' : 'disabled'}`,
+              settings: { askBeforeSwitch }
+            });
+          }
         }
 
-        const success = await storage.setCurrentLocation(currentLocationId);
-        if (!success) {
-          return res.status(500).json({ success: false, error: 'Failed to update location' });
+        if (!currentLocationId && !responseStyle && askBeforeSwitch === undefined) {
+          return res.status(400).json({ success: false, error: 'currentLocationId, responseStyle, or askBeforeSwitch required' });
         }
 
-        // Get the default printer for this location
-        let defaultPrinter = null;
-        if (location.default_printer_id) {
-          defaultPrinter = await storage.getPrinter(location.default_printer_id);
-        }
+        // If we have a location to update, continue with the existing logic
+        if (currentLocationId) {
 
-        return res.status(200).json({
-          success: true,
-          message: `Switched to ${location.name}`,
-          currentLocation: {
-            id: location.id,
-            name: location.name,
-            icon: location.icon,
-            defaultPrinterId: location.default_printer_id
-          },
-          defaultPrinter: defaultPrinter ? {
-            id: defaultPrinter.id,
-            name: defaultPrinter.name,
-            status: defaultPrinter.status,
-            inkLevels: {
-              cyan: defaultPrinter.ink_cyan,
-              magenta: defaultPrinter.ink_magenta,
-              yellow: defaultPrinter.ink_yellow,
-              black: defaultPrinter.ink_black
+          // Verify location exists
+          const location = await storage.getLocation(currentLocationId);
+          if (!location) {
+            return res.status(404).json({ success: false, error: 'Location not found' });
+          }
+
+          const success = await storage.setCurrentLocation(currentLocationId);
+          if (!success) {
+            return res.status(500).json({ success: false, error: 'Failed to update location' });
+          }
+
+          // Get the default printer for this location
+          let defaultPrinter = null;
+          if (location.default_printer_id) {
+            defaultPrinter = await storage.getPrinter(location.default_printer_id);
+          }
+
+          return res.status(200).json({
+            success: true,
+            message: `Switched to ${location.name}`,
+            currentLocation: {
+              id: location.id,
+              name: location.name,
+              icon: location.icon,
+              defaultPrinterId: location.default_printer_id
             },
-            paperCount: defaultPrinter.paper_count
-          } : null
-        });
+            defaultPrinter: defaultPrinter ? {
+              id: defaultPrinter.id,
+              name: defaultPrinter.name,
+              status: defaultPrinter.status,
+              inkLevels: {
+                cyan: defaultPrinter.ink_cyan,
+                magenta: defaultPrinter.ink_magenta,
+                yellow: defaultPrinter.ink_yellow,
+                black: defaultPrinter.ink_black
+              },
+              paperCount: defaultPrinter.paper_count
+            } : null
+          });
+        }
       }
     }
 
-    return res.status(400).json({ 
-      success: false, 
+    return res.status(400).json({
+      success: false,
       error: 'Invalid type parameter',
       availableTypes: ['locations', 'user']
     });

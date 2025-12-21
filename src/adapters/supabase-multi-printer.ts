@@ -62,6 +62,8 @@ export interface DbPrintJob {
 export interface DbUserSettings {
   id: string;
   current_location_id?: string;
+  response_style?: 'technical' | 'friendly' | 'minimal';
+  ask_before_switch?: boolean;  // Ask user before switching to fallback printer
   auto_switch_enabled: boolean;
   theme: string;
   created_at: string;
@@ -112,6 +114,30 @@ export class SupabaseMultiPrinterStorage {
 
     if (error) {
       console.error('Error setting location:', error);
+      return false;
+    }
+    return true;
+  }
+
+  async setResponseStyle(style: 'technical' | 'friendly' | 'minimal'): Promise<boolean> {
+    const { error } = await this.getClient()
+      .from('user_settings')
+      .upsert({ id: 'default', response_style: style });
+
+    if (error) {
+      console.error('Error setting response style:', error);
+      return false;
+    }
+    return true;
+  }
+
+  async setAskBeforeSwitch(askBeforeSwitch: boolean): Promise<boolean> {
+    const { error } = await this.getClient()
+      .from('user_settings')
+      .upsert({ id: 'default', ask_before_switch: askBeforeSwitch });
+
+    if (error) {
+      console.error('Error setting ask_before_switch:', error);
       return false;
     }
     return true;
@@ -309,7 +335,7 @@ export class SupabaseMultiPrinterStorage {
       }
 
       // Default printer not ready - find reason
-      const reason = defaultPrinter 
+      const reason = defaultPrinter
         ? this.getPrinterIssue(defaultPrinter)
         : 'Default printer not found';
 
@@ -342,8 +368,8 @@ export class SupabaseMultiPrinterStorage {
     // Check status
     if (printer.status !== 'ready') return false;
     // Check ink (any color below 5% is unusable)
-    if (printer.ink_cyan < 5 || printer.ink_magenta < 5 || 
-        printer.ink_yellow < 5 || printer.ink_black < 5) return false;
+    if (printer.ink_cyan < 5 || printer.ink_magenta < 5 ||
+      printer.ink_yellow < 5 || printer.ink_black < 5) return false;
     // Check paper
     if (printer.paper_count < 1) return false;
     return true;

@@ -92,3 +92,23 @@ CREATE INDEX IF NOT EXISTS idx_template_active ON response_templates(template_ke
 ALTER TABLE response_templates ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow public access" ON response_templates;
 CREATE POLICY "Allow public access" ON response_templates FOR ALL USING (true);
+
+-- User Settings table (stores global preferences)
+CREATE TABLE IF NOT EXISTS user_settings (
+  id text PRIMARY KEY DEFAULT 'default',
+  current_location_id text,
+  response_style text DEFAULT 'technical', -- 'technical', 'friendly', or 'minimal'
+  ask_before_switch boolean DEFAULT false, -- Ask user before switching to fallback printer
+  auto_switch_enabled boolean DEFAULT true,
+  theme text DEFAULT 'dark',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Add columns if table already exists
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS response_style text DEFAULT 'technical';
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ask_before_switch boolean DEFAULT false;
+
+ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public access" ON user_settings;
+CREATE POLICY "Allow public access" ON user_settings FOR ALL USING (true);

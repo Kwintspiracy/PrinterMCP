@@ -20,8 +20,13 @@ import {
     Input,
     Divider,
     Code,
+    Alert,
+    AlertIcon,
+    Switch,
+    FormControl,
+    FormLabel,
 } from '@chakra-ui/react';
-import { FiSave, FiRotateCcw, FiClock, FiCheck, FiEye } from 'react-icons/fi';
+import { FiSave, FiRotateCcw, FiClock, FiCheck, FiEye, FiZap } from 'react-icons/fi';
 
 interface TemplateContent {
     technical: string;
@@ -149,6 +154,13 @@ export default function TemplateEditor({ apiBase = '' }: TemplateEditorProps) {
     const [previewText, setPreviewText] = useState('');
     const [loading, setLoading] = useState(false);
     const [supabaseConnected, setSupabaseConnected] = useState(false);
+    const [activeStyle, setActiveStyle] = useState<'technical' | 'friendly' | 'minimal'>(() => {
+        // Initialize from localStorage
+        const saved = localStorage.getItem('printer-response-style');
+        return (saved as 'technical' | 'friendly' | 'minimal') || 'technical';
+    });
+    const [styleSaving, setStyleSaving] = useState(false);
+    const [askBeforeSwitch, setAskBeforeSwitch] = useState(false);
     const toast = useToast();
 
     const borderColor = useColorModeValue('borderLight.default', 'border.default');
@@ -160,7 +172,72 @@ export default function TemplateEditor({ apiBase = '' }: TemplateEditorProps) {
     // Try to fetch from API, but fall back to defaults
     useEffect(() => {
         fetchTemplates();
+        fetchActiveStyle();
     }, []);
+
+    // Fetch active style from server
+    const fetchActiveStyle = async () => {
+        try {
+            const res = await fetch(`${apiBase}/api/settings?type=user`);
+            const data = await res.json();
+            if (data.success && data.settings) {
+                if (data.settings.responseStyle) {
+                    setActiveStyle(data.settings.responseStyle);
+                    localStorage.setItem('printer-response-style', data.settings.responseStyle);
+                }
+                if (data.settings.askBeforeSwitch !== undefined) {
+                    setAskBeforeSwitch(data.settings.askBeforeSwitch);
+                }
+            }
+        } catch (error) {
+            console.warn('Could not fetch active style from server, using localStorage');
+        }
+    };
+
+    // Save active style to both localStorage and server
+    const saveActiveStyle = async (style: 'technical' | 'friendly' | 'minimal') => {
+        setActiveStyle(style);
+        localStorage.setItem('printer-response-style', style);
+        setStyleSaving(true);
+
+        try {
+            const res = await fetch(`${apiBase}/api/settings?type=user`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ responseStyle: style })
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast({ title: `Active style: ${style}`, status: 'success', duration: 2000 });
+            }
+        } catch (error) {
+            console.warn('Could not save style to server, saved locally only');
+        }
+        setStyleSaving(false);
+    };
+
+    // Save askBeforeSwitch preference
+    const saveAskBeforeSwitch = async (enabled: boolean) => {
+        setAskBeforeSwitch(enabled);
+
+        try {
+            const res = await fetch(`${apiBase}/api/settings?type=user`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ askBeforeSwitch: enabled })
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast({
+                    title: enabled ? 'LLM will ask before switching printers' : 'LLM will auto-switch printers',
+                    status: 'success',
+                    duration: 2000
+                });
+            }
+        } catch (error) {
+            console.warn('Could not save setting to server');
+        }
+    };
 
     // Update preview when content or style changes
     useEffect(() => {
@@ -269,9 +346,52 @@ export default function TemplateEditor({ apiBase = '' }: TemplateEditorProps) {
 
     return (
         <Box border="1px solid" borderColor={borderColor} borderRadius="md" bg={cardBg} overflow="hidden">
+            {/* Active Style Selector */}
+            <Box px={4} py={3} borderBottom="1px solid" borderColor={borderColor} bg="green.50" _dark={{ bg: 'green.900' }}>
+                <HStack justify="space-between" align="center">
+                    <HStack>
+                        <Icon as={FiZap} color="green.500" />
+                        <Text fontWeight="semibold" fontSize="sm">Active Response Style</Text>
+                    </HStack>
+                    <Select
+                        size="sm"
+                        w="160px"
+                        value={activeStyle}
+                        onChange={(e) => saveActiveStyle(e.target.value as any)}
+                        isDisabled={styleSaving}
+                        bg={cardBg}
+                    >
+                        <option value="technical">⚙️ Technical</option>
+                        <option value="friendly">😊 Friendly</option>
+                        <option value="minimal">📝 Minimal</option>
+                    </Select>
+                </HStack>
+                <HStack justify="space-between" align="center" mt={3} pt={3} borderTop="1px solid" borderColor={borderColor}>
+                    <VStack align="start" spacing={0}>
+                        <Text fontSize="sm" fontWeight="medium">Ask Before Switching Printers</Text>
+                        <Text fontSize="xs" color={mutedText}>When default printer is unavailable</Text>
+                    </VStack>
+                    <Switch
+                        isChecked={askBeforeSwitch}
+                        onChange={(e) => saveAskBeforeSwitch(e.target.checked)}
+                        colorScheme="green"
+                    />
+                </HStack>
+            </Box>
+
+            {/* LLM Trigger Guide */}
+            <Box px={4} py={2} borderBottom="1px solid" borderColor={borderColor} bg={headerBg}>
+                <Text fontSize="xs" fontWeight="semibold" color={mutedText} mb={1}>HOW TO TRIGGER FROM LLM</Text>
+                <Code fontSize="xs" display="block" whiteSpace="pre" p={2} borderRadius="md">
+                    {`Tool: get_status
+Params: { "responseStyle": "${activeStyle}" }`}
+                </Code>
+            </Box>
+
             {/* Header */}
             <Box px={4} py={3} borderBottom="1px solid" borderColor={borderColor} bg={headerBg}>
-                <Text fontWeight="semibold" fontSize="sm">Response Template Editor</Text>
+                <Text fontWeight="semibold" fontSize="sm">Template Editor</Text>
+                <Text fontSize="xs" color={mutedText}>Edit the text templates for each printer condition</Text>
             </Box>
 
             <Flex>

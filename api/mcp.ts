@@ -10,6 +10,7 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { VirtualPrinter } from '../build/printer.js';
 import { StateManager } from '../build/state-manager.js';
 import { TOOLS, RESOURCES } from '../build/tools.js';
+import { smartPrint } from '../build/smart-print.js';
 
 let printerInstance: VirtualPrinter | null = null;
 
@@ -71,7 +72,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       switch (name) {
         case 'print_document':
-          result = printer.printDocument(args);
+          // Use smart print with fallback logic
+          const smartResult = await smartPrint({
+            documentName: args.documentName,
+            pages: args.pages,
+            color: args.color,
+            quality: args.quality,
+            paperSize: args.paperSize,
+            locationId: args.locationId,
+            printerId: args.printerId,
+            confirmedFallback: args.confirmedFallback
+          });
+
+          if (smartResult.requiresConfirmation) {
+            // Return confirmation request - LLM should ask user
+            result = {
+              status: 'confirmation_required',
+              message: smartResult.notificationMessage,
+              printerAvailable: smartResult.printerUsed.name,
+              fallbackReason: smartResult.fallbackReason,
+              hint: 'Call print_document again with confirmedFallback: true to proceed'
+            };
+          } else if (smartResult.success) {
+            result = {
+              jobId: smartResult.jobId,
+              message: smartResult.usedFallback
+                ? smartResult.notificationMessage
+                : `Print job queued on ${smartResult.printerUsed.name}`,
+              printerUsed: smartResult.printerUsed.name,
+              usedFallback: smartResult.usedFallback,
+              fallbackReason: smartResult.fallbackReason
+            };
+          } else {
+            result = {
+              error: smartResult.error,
+              success: false
+            };
+          }
           break;
 
         case 'cancel_job':

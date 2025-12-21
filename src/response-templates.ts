@@ -97,6 +97,16 @@ export const DEFAULT_TEMPLATES: Record<string, TemplateContent> = {
         technical: 'JOB_FAILED: "${jobName}" could not be printed. Reason: ${reason}.',
         friendly: 'Unfortunately "${jobName}" couldn\'t be printed because: ${reason}',
         minimal: 'Print failed'
+    },
+    'printer_switch_notify': {
+        technical: 'PRINTER_FALLBACK: Default printer "${defaultPrinter}" unavailable (${reason}). Printing on "${fallbackPrinter}" instead.',
+        friendly: 'Heads up! Your ${defaultPrinter} can\'t print right now (${reason}), so I\'m using ${fallbackPrinter} instead. 🔄',
+        minimal: 'Using ${fallbackPrinter} (fallback)'
+    },
+    'printer_switch_ask': {
+        technical: 'CONFIRMATION_REQUIRED: Default printer "${defaultPrinter}" unavailable (${reason}). Approve printing on "${fallbackPrinter}"?',
+        friendly: 'Your ${defaultPrinter} isn\'t available right now (${reason}). Would you like me to print on ${fallbackPrinter} instead? 🤔',
+        minimal: 'Use ${fallbackPrinter}? (${defaultPrinter} unavailable)'
     }
 };
 
