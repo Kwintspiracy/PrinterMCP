@@ -10,8 +10,10 @@
     "build": "tsc",
     "build:web": "tsc src/web-server.ts --outDir build --module commonjs --target es2020 --esModuleInterop --resolveJsonModule --skipLibCheck",
     "build:mcp-http": "tsc src/mcp-http-server.ts --outDir build --module commonjs --target es2020 --esModuleInterop --resolveJsonModule --skipLibCheck",
+    "build:api": "tsc api/**/*.ts --outDir api --module commonjs --target es2020 --esModuleInterop --resolveJsonModule --skipLibCheck --moduleResolution node",
     "build:ui": "vite build",
     "build:all": "npm run build && npm run build:web && npm run build:mcp-http && npm run build:ui",
+    "build:vercel": "npm run build && npm run build:ui",
     "start": "node build/index.js",
     "start:web": "node build/web-server.js",
     "start:mcp-http": "node build/mcp-http-server.js",
@@ -20,8 +22,9 @@
     "dev:mcp-http": "npm run build:mcp-http && node build/mcp-http-server.js",
     "dev:ui": "vite",
     "dev:full": "npm run build:web && concurrently \"npm run dev:ui\" \"npm run start:web\"",
+    "dev:vercel": "npm run build:vercel && npx tsx dev-server.js",
     "watch": "tsc --watch",
-    "vercel-build": "npm run build:all"
+    "vercel-build": "npm run build:vercel"
   },
   "keywords": [
     "mcp",
@@ -62,6 +65,7 @@
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.1.0",
     "concurrently": "^9.2.1",
+    "tsx": "^4.7.0",
     "typescript": "^5.9.3",
     "vite": "^7.1.12"
   }

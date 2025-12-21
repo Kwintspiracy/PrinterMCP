@@ -253,6 +253,53 @@ npm publish
 ```
 Then install globally on any computer.
 
+## Vercel Deployment
+
+This project can be deployed to Vercel as a serverless API with web UI.
+
+### Prerequisites
+1. A Vercel account
+2. Vercel CLI installed: `npm i -g vercel`
+3. A Vercel KV database (for state persistence)
+
+### Setup Steps
+
+1. **Create Vercel KV Database**
+   - Go to your Vercel dashboard
+   - Navigate to Storage → Create Database → KV
+   - Name it (e.g., "virtual-printer-kv")
+   - Vercel will auto-generate the connection credentials
+
+2. **Configure Environment Variables**
+   
+   In your Vercel project settings (Settings → Environment Variables), add:
+   ```
+   STORAGE_TYPE=vercel-kv
+   NODE_ENV=production
+   ```
+   
+   The KV credentials (`KV_REST_API_URL`, `KV_REST_API_TOKEN`) are automatically added when you connect the KV database to your project.
+
+3. **Deploy**
+   ```bash
+   vercel
+   ```
+
+### Vercel API Endpoints
+
+Once deployed, your printer will be accessible via:
+- **Tools List**: `GET https://your-app.vercel.app/api/mcp?type=tools`
+- **Execute Tool**: `POST https://your-app.vercel.app/api/mcp?type=tool&name=print_document`
+- **Get Resource**: `GET https://your-app.vercel.app/api/mcp?type=resource&name=status`
+- **Web UI**: `https://your-app.vercel.app/`
+
+### Important Notes
+
+- **State Persistence**: Vercel uses KV (Redis) for state storage, not local files
+- **Serverless Limitations**: Print jobs simulate elapsed time on each request (no background processing)
+- **Cold Starts**: First request may take longer as the function initializes
+
+
 ## Troubleshooting
 
 ### Printer Won't Start

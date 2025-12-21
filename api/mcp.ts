@@ -9,6 +9,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { VirtualPrinter } from '../build/printer.js';
 import { StateManager } from '../build/state-manager.js';
+import { TOOLS, RESOURCES } from '../build/tools.js';
 
 let printerInstance: VirtualPrinter | null = null;
 
@@ -17,7 +18,11 @@ async function getPrinter() {
     const stateManager = new StateManager();
     printerInstance = new VirtualPrinter(stateManager);
   }
+  // Critical: Reload state from storage to get latest updates (fixes sync with dashboard)
   await printerInstance.reloadState();
+  // Update state based on elapsed time (for serverless environments)
+  // This simulates print job progress even when the process wasn't running
+  await printerInstance.updateState();
   return printerInstance;
 }
 
@@ -39,129 +44,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // List all tools
     if (type === 'tools' && req.method === 'GET') {
       return res.status(200).json({
-        tools: [
-          { 
-            name: 'print_document', 
-            description: 'Submit a print job',
-            parameters: {
-              documentName: 'string (required)',
-              pages: 'number (required)',
-              color: 'boolean (optional)',
-              quality: 'draft|normal|high|photo (optional)',
-              paperSize: 'A4|Letter|Legal|A3|4x6 (optional)'
-            }
-          },
-          { 
-            name: 'cancel_job', 
-            description: 'Cancel a print job',
-            parameters: {
-              jobId: 'string (required)'
-            }
-          },
-          { 
-            name: 'get_status', 
-            description: 'Get complete printer status',
-            parameters: {}
-          },
-          { 
-            name: 'get_queue', 
-            description: 'Get print queue status',
-            parameters: {}
-          },
-          { 
-            name: 'get_statistics', 
-            description: 'Get usage statistics',
-            parameters: {}
-          },
-          { 
-            name: 'pause_printer', 
-            description: 'Pause the printer',
-            parameters: {}
-          },
-          { 
-            name: 'resume_printer', 
-            description: 'Resume the printer',
-            parameters: {}
-          },
-          { 
-            name: 'refill_ink_cartridge', 
-            description: 'Refill ink cartridge',
-            parameters: {
-              color: 'cyan|magenta|yellow|black (required)'
-            }
-          },
-          { 
-            name: 'load_paper', 
-            description: 'Load paper into tray',
-            parameters: {
-              count: 'number (required)',
-              paperSize: 'A4|Letter|Legal|A3|4x6 (optional)'
-            }
-          },
-          { 
-            name: 'clean_print_heads', 
-            description: 'Clean print heads',
-            parameters: {}
-          },
-          { 
-            name: 'align_print_heads', 
-            description: 'Align print heads',
-            parameters: {}
-          },
-          { 
-            name: 'run_nozzle_check', 
-            description: 'Run nozzle check',
-            parameters: {}
-          },
-          { 
-            name: 'clear_paper_jam', 
-            description: 'Clear paper jam error',
-            parameters: {}
-          },
-          { 
-            name: 'power_cycle', 
-            description: 'Power cycle printer',
-            parameters: {}
-          },
-          { 
-            name: 'reset_printer', 
-            description: 'Reset printer to factory defaults',
-            parameters: {}
-          }
-        ]
+        tools: TOOLS.map((tool: any) => ({
+          name: tool.name,
+          description: tool.description,
+          parameters: formatSchemaToParameters(tool.inputSchema)
+        }))
       });
     }
 
     // List all resources
     if (type === 'resources' && req.method === 'GET') {
       return res.status(200).json({
-        resources: [
-          { 
-            name: 'state', 
-            description: 'Complete printer state including status, ink levels, paper, queue, and errors',
-            uri: 'printer://state'
-          },
-          { 
-            name: 'queue', 
-            description: 'Current print queue with job details',
-            uri: 'printer://queue'
-          },
-          { 
-            name: 'logs', 
-            description: 'Printer event logs (supports ?limit=N parameter)',
-            uri: 'printer://logs'
-          },
-          { 
-            name: 'statistics', 
-            description: 'Usage statistics including pages printed, ink consumed, and job counts',
-            uri: 'printer://statistics'
-          },
-          { 
-            name: 'capabilities', 
-            description: 'Printer capabilities and specifications',
-            uri: 'printer://capabilities'
-          }
-        ]
+        resources: RESOURCES
       });
     }
 
@@ -179,15 +73,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         case 'print_document':
           result = printer.printDocument(args);
           break;
-        
+
         case 'cancel_job':
           result = { message: printer.cancelJob(args.jobId) };
           break;
-        
+
         case 'get_status':
           result = printer.getStatus();
           break;
-        
+
         case 'get_queue':
           const status = printer.getStatus();
           result = {
@@ -196,61 +90,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             pendingJobs: status.queue.jobs
           };
           break;
-        
+
         case 'get_statistics':
           result = printer.getStatistics();
           break;
-        
+
         case 'pause_printer':
           result = { message: printer.pause() };
           break;
-        
+
         case 'resume_printer':
           result = { message: printer.resume() };
           break;
-        
+
         case 'refill_ink_cartridge':
           result = { message: printer.refillInk(args.color) };
           break;
-        
+
         case 'load_paper':
           result = { message: printer.loadPaper(args.count, args.paperSize) };
           break;
-        
+
         case 'clean_print_heads':
           result = { message: printer.cleanPrintHeads() };
           break;
-        
+
         case 'align_print_heads':
           result = { message: printer.alignPrintHeads() };
           break;
-        
+
         case 'run_nozzle_check':
           result = { message: printer.runNozzleCheck() };
           break;
-        
+
         case 'clear_paper_jam':
           result = { message: printer.clearPaperJam() };
           break;
-        
+
         case 'power_cycle':
           result = { message: printer.powerCycle() };
           break;
-        
+
         case 'reset_printer':
           result = { message: await printer.reset() };
           break;
-        
+
         default:
           return res.status(404).json({
             error: 'Tool not found',
-            availableTools: [
-              'print_document', 'cancel_job', 'get_status', 'get_queue',
-              'get_statistics', 'pause_printer', 'resume_printer',
-              'refill_ink_cartridge', 'load_paper', 'clean_print_heads',
-              'align_print_heads', 'run_nozzle_check', 'clear_paper_jam',
-              'power_cycle', 'reset_printer'
-            ]
+            availableTools: TOOLS.map((t: any) => t.name)
           });
       }
 
@@ -274,7 +162,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         case 'state':
           result = printer.getStatus();
           break;
-        
+
         case 'queue':
           const status = printer.getStatus();
           result = {
@@ -283,24 +171,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             pendingJobs: status.queue.jobs
           };
           break;
-        
+
         case 'logs':
           const limit = parseInt(req.query.limit as string) || 100;
           result = printer.getLogs(limit);
           break;
-        
+
         case 'statistics':
           result = printer.getStatistics();
           break;
-        
+
         case 'capabilities':
           result = printer.getCapabilities();
           break;
-        
+
         default:
           return res.status(404).json({
             error: 'Resource not found',
-            availableResources: ['state', 'queue', 'logs', 'statistics', 'capabilities']
+            availableResources: RESOURCES.map((r: any) => r.name)
           });
       }
 
@@ -312,7 +200,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Invalid request
-    return res.status(400).json({ 
+    return res.status(400).json({
       error: 'Invalid request',
       usage: {
         'List tools': 'GET /api/mcp?type=tools',
@@ -329,4 +217,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       error: error instanceof Error ? error.message : String(error)
     });
   }
+}
+
+// Helper to format JSON schema to simple parameters object for display
+function formatSchemaToParameters(schema: any): Record<string, string> {
+  if (!schema || !schema.properties) return {};
+
+  const params: Record<string, string> = {};
+  for (const [key, value] of Object.entries(schema.properties) as [string, any][]) {
+    let desc = value.type;
+    if (value.enum) desc += ` (${value.enum.join('|')})`;
+    if (schema.required?.includes(key)) desc += ' (required)';
+    else desc += ' (optional)';
+    params[key] = desc;
+  }
+  return params;
 }

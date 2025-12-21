@@ -34,6 +34,7 @@ export interface PrinterState {
   logs: any[];
   lastUpdated: number;
   capabilities: any;
+  version: number; // For optimistic locking
 }
 
 /**
@@ -45,24 +46,24 @@ export interface IStorageAdapter {
    * @returns Printer state or null if not found
    */
   loadState(): Promise<PrinterState | null>;
-  
+
   /**
    * Save printer state to storage
    * @param state Printer state to save
    */
   saveState(state: PrinterState): Promise<void>;
-  
+
   /**
    * Check if storage is available and working
    * @returns true if storage is healthy
    */
   healthCheck(): Promise<boolean>;
-  
+
   /**
    * Clear all stored state (factory reset)
    */
   clearState(): Promise<void>;
-  
+
   /**
    * Get storage type identifier
    */
@@ -73,36 +74,88 @@ export interface IStorageAdapter {
  * Factory function to create appropriate storage adapter based on environment
  */
 export async function createStorageAdapter(): Promise<IStorageAdapter> {
+  // Check for Supabase credentials first
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY;
+
+  if (supabaseUrl && supabaseKey) {
+    console.log('[StorageAdapter] Supabase credentials found, using Supabase normalized storage');
+    try {
+      const { SupabaseNormalizedStorage } = await import('./supabase-normalized-storage.js');
+      const storage = new SupabaseNormalizedStorage();
+
+      // Health check to verify tables exist
+      const isHealthy = await storage.healthCheck();
+      if (isHealthy) {
+        console.log('[StorageAdapter] Supabase normalized storage is healthy');
+        return storage as any; // Type cast since it has different methods
+      }
+      console.warn('[StorageAdapter] Supabase normalized storage health check failed, using in-memory');
+      return createInMemoryAdapter();
+    } catch (error) {
+      console.warn('[StorageAdapter] Supabase normalized storage failed to initialize, falling back:', error);
+      return createInMemoryAdapter();
+    }
+  }
+
   // Auto-detect Vercel environment
   const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
   const storageType = process.env.STORAGE_TYPE || (isVercel ? 'vercel-kv' : 'file');
-  
-  console.log(`Storage adapter: type=${storageType}, isVercel=${isVercel}`);
-  
+
+  console.log(`[StorageAdapter] Creating adapter: type=${storageType}, isVercel=${isVercel}`);
+
   switch (storageType) {
-    case 'supabase':
-      try {
-        const { SupabaseStorage } = await import('./supabase-storage.js');
-        return new SupabaseStorage();
-      } catch (error) {
-        console.warn('Supabase storage failed to initialize, falling back to file storage:', error);
-        const { FileStorage } = await import('./file-storage.js');
-        return new FileStorage();
-      }
-    
     case 'vercel-kv':
       try {
         const { VercelKVStorage } = await import('./vercel-storage.js');
-        return new VercelKVStorage();
+        const storage = new VercelKVStorage();
+        // Test if KV is actually available
+        const isHealthy = await storage.healthCheck().catch(() => false);
+        if (isHealthy) {
+          console.log('[StorageAdapter] Vercel KV is healthy');
+          return storage;
+        }
+        console.warn('[StorageAdapter] Vercel KV not healthy, using in-memory storage');
+        return createInMemoryAdapter();
       } catch (error) {
-        console.warn('Vercel KV storage failed to initialize, falling back to file storage:', error);
-        const { FileStorage } = await import('./file-storage.js');
-        return new FileStorage();
+        console.warn('[StorageAdapter] Vercel KV failed, using in-memory storage:', error);
+        return createInMemoryAdapter();
       }
-    
+
     case 'file':
     default:
+      // In Vercel, file storage won't work for persistence, so use in-memory if we fell through
+      if (isVercel) {
+        console.warn('[StorageAdapter] File storage selected but running in Vercel, using in-memory storage');
+        return createInMemoryAdapter();
+      }
+
       const { FileStorage } = await import('./file-storage.js');
       return new FileStorage();
   }
+}
+
+/**
+ * Simple in-memory storage adapter for serverless environments without persistent storage
+ */
+function createInMemoryAdapter(): IStorageAdapter {
+  const store = new Map<string, any>();
+
+  return {
+    async loadState(key?: string): Promise<PrinterState | null> {
+      return store.get(key || 'default') || null;
+    },
+    async saveState(state: PrinterState, key?: string): Promise<void> {
+      store.set(key || 'default', state);
+    },
+    async healthCheck(): Promise<boolean> {
+      return true;
+    },
+    async clearState(): Promise<void> {
+      store.clear();
+    },
+    getType(): string {
+      return 'in-memory';
+    }
+  };
 }

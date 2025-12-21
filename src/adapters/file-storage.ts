@@ -23,25 +23,53 @@ export class FileStorage implements IStorageAdapter {
     }
   }
 
-  async loadState(): Promise<PrinterState | null> {
+  /**
+   * Get the file path for a given key
+   */
+  private getFilePath(key?: string): string {
+    if (!key || key === 'default') {
+      return this.stateFile;
+    }
+    // Use key as filename for multi-state support
+    return path.join(this.stateDir, `${key}.json`);
+  }
+
+  /**
+   * Load state from file
+   * @param key Optional key for multi-state support (defaults to 'printer-state')
+   */
+  async loadState(key?: string): Promise<PrinterState | any | null> {
+    const filePath = this.getFilePath(key);
+    
     try {
-      if (fs.existsSync(this.stateFile)) {
-        const data = fs.readFileSync(this.stateFile, 'utf-8');
-        return JSON.parse(data) as PrinterState;
+      if (fs.existsSync(filePath)) {
+        const data = fs.readFileSync(filePath, 'utf-8');
+        const parsed = JSON.parse(data);
+        console.log(`[FileStorage] Loaded state from: ${filePath}`);
+        return parsed;
       }
+      console.log(`[FileStorage] No state file found at: ${filePath}`);
       return null;
     } catch (error) {
-      console.error('Error loading state from file:', error);
+      console.error(`[FileStorage] Error loading state from ${filePath}:`, error);
       return null;
     }
   }
 
-  async saveState(state: PrinterState): Promise<void> {
+  /**
+   * Save state to file
+   * @param state The state to save
+   * @param key Optional key for multi-state support (defaults to 'printer-state')
+   */
+  async saveState(state: PrinterState | any, key?: string): Promise<void> {
+    const filePath = this.getFilePath(key);
+    
     try {
       const data = JSON.stringify(state, null, 2);
-      fs.writeFileSync(this.stateFile, data, 'utf-8');
+      fs.writeFileSync(filePath, data, 'utf-8');
+      console.log(`[FileStorage] Saved state to: ${filePath}`);
     } catch (error) {
-      console.error('Error saving state to file:', error);
+      console.error(`[FileStorage] Error saving state to ${filePath}:`, error);
       throw error;
     }
   }
@@ -56,13 +84,16 @@ export class FileStorage implements IStorageAdapter {
     }
   }
 
-  async clearState(): Promise<void> {
+  async clearState(key?: string): Promise<void> {
+    const filePath = this.getFilePath(key);
+    
     try {
-      if (fs.existsSync(this.stateFile)) {
-        fs.unlinkSync(this.stateFile);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log(`[FileStorage] Cleared state file: ${filePath}`);
       }
     } catch (error) {
-      console.error('Error clearing state file:', error);
+      console.error(`[FileStorage] Error clearing state file ${filePath}:`, error);
       throw error;
     }
   }
@@ -74,7 +105,7 @@ export class FileStorage implements IStorageAdapter {
   /**
    * Get the path to the state file (for debugging)
    */
-  getStatePath(): string {
-    return this.stateFile;
+  getStatePath(key?: string): string {
+    return this.getFilePath(key);
   }
 }
