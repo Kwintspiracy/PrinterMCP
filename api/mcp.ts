@@ -1,28 +1,119 @@
 /**
  * Vercel Serverless Function: Consolidated MCP Endpoint
  * Handles tools listing, resources listing, tool execution, and resource access
- * GET /api/mcp?type=tools|resources
- * GET /api/mcp?type=resource&name={resourceName}
- * POST /api/mcp?type=tool&name={toolName}
+ * 
+ * Uses multi-printer system with location-based default printer and smart fallback
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { loadPrinter, loadStateManager, type VirtualPrinter } from './_lib';
 import { TOOLS, RESOURCES } from '../build/tools.js';
+import { SupabaseMultiPrinterStorage, DbPrinter } from '../build/adapters/supabase-multi-printer.js';
+import { getTemplateEngine, ResponseStyle } from '../build/response-templates.js';
 
-let printerInstance: VirtualPrinter | null = null;
+// Singleton storage instance
+let storageInstance: SupabaseMultiPrinterStorage | null = null;
 
-async function getPrinter(): Promise<VirtualPrinter> {
-  if (!printerInstance) {
-    const StateManager = await loadStateManager();
-    const VirtualPrinter = await loadPrinter();
-    const stateManager = new StateManager();
-    printerInstance = new VirtualPrinter(stateManager);
+function getStorage(): SupabaseMultiPrinterStorage {
+  if (!storageInstance) {
+    storageInstance = new SupabaseMultiPrinterStorage();
   }
-  // Critical: Reload state from storage to get latest updates
-  await printerInstance!.reloadState();
-  await printerInstance!.updateState();
-  return printerInstance!;
+  return storageInstance;
+}
+
+/**
+ * Get the best printer for printing based on user's current location
+ */
+async function getDefaultPrinter(): Promise<{
+  printer: DbPrinter | null;
+  locationName: string;
+  wasDefault: boolean;
+  fallbackReason?: string;
+}> {
+  const storage = getStorage();
+  const settings = await storage.getUserSettings();
+
+  if (!settings?.current_location_id) {
+    return { printer: null, locationName: '', wasDefault: false, fallbackReason: 'No location set' };
+  }
+
+  const location = await storage.getLocation(settings.current_location_id);
+  if (!location) {
+    return { printer: null, locationName: '', wasDefault: false, fallbackReason: 'Location not found' };
+  }
+
+  const result = await storage.findBestPrinter(settings.current_location_id);
+  return {
+    ...result,
+    locationName: location.name
+  };
+}
+
+/**
+ * Format printer status for API response
+ */
+function formatPrinterStatus(printer: DbPrinter, locationName?: string) {
+  const inkLevels = {
+    cyan: printer.ink_cyan,
+    magenta: printer.ink_magenta,
+    yellow: printer.ink_yellow,
+    black: printer.ink_black,
+  };
+
+  const inkStatus = {
+    depleted: [] as string[],
+    low: [] as string[],
+  };
+
+  for (const [color, level] of Object.entries(inkLevels)) {
+    if (level <= 0) inkStatus.depleted.push(color);
+    else if (level <= 15) inkStatus.low.push(color);
+  }
+
+  const issues: string[] = [];
+  const canPrint = printer.status === 'ready' &&
+    printer.paper_count > 0 &&
+    inkStatus.depleted.length === 0;
+
+  if (printer.paper_count === 0) {
+    issues.push('Out of paper');
+  } else if (printer.paper_count < 10) {
+    issues.push('Low paper');
+  }
+
+  if (inkStatus.depleted.length > 0) {
+    issues.push(`Ink depleted: ${inkStatus.depleted.join(', ')}`);
+  } else if (inkStatus.low.length > 0) {
+    issues.push(`Low ink: ${inkStatus.low.join(', ')}`);
+  }
+
+  let operationalStatus: 'ready' | 'not_ready' | 'error' = 'not_ready';
+  if (printer.status === 'error') {
+    operationalStatus = 'error';
+  } else if (canPrint) {
+    operationalStatus = 'ready';
+  }
+
+  return {
+    id: printer.id,
+    name: printer.name,
+    location: locationName,
+    status: printer.status || 'ready',
+    operationalStatus,
+    canPrint,
+    issues,
+    inkLevels,
+    inkStatus,
+    paper: {
+      count: printer.paper_count,
+      capacity: printer.paper_tray_capacity,
+      size: printer.paper_size,
+    },
+    currentJob: null,
+    queue: { length: 0, jobs: [] },
+    errors: [],
+    uptimeSeconds: 0,
+    maintenanceNeeded: false
+  };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -53,9 +144,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // List all resources
     if (type === 'resources' && req.method === 'GET') {
-      return res.status(200).json({
-        resources: RESOURCES
-      });
+      return res.status(200).json({ resources: RESOURCES });
     }
 
     // Execute a tool
@@ -65,74 +154,231 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const { arguments: args = {} } = req.body;
-      const printer = await getPrinter();
+      const storage = getStorage();
       let result;
 
       switch (name) {
-        case 'print_document':
-          result = printer.printDocument(args);
-          break;
+        case 'print_document': {
+          // Get user settings for fallback behavior
+          const settings = await storage.getUserSettings();
+          const askBeforeSwitch = settings?.ask_before_switch ?? false;
+          const responseStyle = (settings?.response_style as ResponseStyle) || 'technical';
 
-        case 'cancel_job':
-          result = { message: printer.cancelJob(args.jobId) };
-          break;
+          // Find the best available printer
+          const { printer, locationName, wasDefault, fallbackReason } = await getDefaultPrinter();
 
-        case 'get_status':
-          result = printer.getStatus();
-          break;
+          if (!printer) {
+            result = {
+              success: false,
+              error: fallbackReason || 'No available printers'
+            };
+            break;
+          }
 
-        case 'get_queue':
-          const status = printer.getStatus();
+          // If using fallback and askBeforeSwitch is enabled (and not already confirmed)
+          if (!wasDefault && askBeforeSwitch && !args.confirmedFallback) {
+            const templateEngine = getTemplateEngine();
+            const location = await storage.getLocation(settings?.current_location_id || '');
+            const defaultPrinter = location?.default_printer_id
+              ? await storage.getPrinter(location.default_printer_id)
+              : null;
+
+            const notificationMessage = await templateEngine.format(
+              'printer_switch_ask',
+              responseStyle,
+              {
+                defaultPrinter: defaultPrinter?.name || 'Default printer',
+                fallbackPrinter: printer.name,
+                reason: fallbackReason || 'unavailable'
+              }
+            );
+
+            result = {
+              status: 'confirmation_required',
+              message: notificationMessage,
+              printerAvailable: printer.name,
+              fallbackReason,
+              hint: 'Call print_document again with confirmedFallback: true to proceed'
+            };
+            break;
+          }
+
+          // Queue the print job
+          const jobId = `job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          await storage.addPrintJob(printer.id, {
+            id: jobId,
+            document_name: args.documentName || 'Untitled',
+            pages: args.pages || 1,
+            color: args.color ?? false,
+            quality: args.quality || 'normal',
+            paper_size: args.paperSize || 'A4',
+            status: 'queued',
+            progress: 0,
+            current_page: 0
+          });
+
+          // Generate fallback notification if needed
+          let notificationMessage: string | undefined;
+          if (!wasDefault) {
+            const templateEngine = getTemplateEngine();
+            const location = await storage.getLocation(settings?.current_location_id || '');
+            const defaultPrinter = location?.default_printer_id
+              ? await storage.getPrinter(location.default_printer_id)
+              : null;
+
+            notificationMessage = await templateEngine.format(
+              'printer_switch_notify',
+              responseStyle,
+              {
+                defaultPrinter: defaultPrinter?.name || 'Default printer',
+                fallbackPrinter: printer.name,
+                reason: fallbackReason || 'unavailable'
+              }
+            );
+          }
+
           result = {
-            currentJob: status.currentJob,
-            queueLength: status.queue.length,
-            pendingJobs: status.queue.jobs
+            success: true,
+            jobId,
+            message: notificationMessage || `Print job queued on ${printer.name}`,
+            printerUsed: printer.name,
+            location: locationName,
+            usedFallback: !wasDefault,
+            fallbackReason: wasDefault ? undefined : fallbackReason,
+            estimatedTime: `${Math.ceil((args.pages || 1) * 3)} seconds`
           };
           break;
+        }
 
-        case 'get_statistics':
-          result = printer.getStatistics();
+        case 'get_status': {
+          const { printer, locationName, wasDefault, fallbackReason } = await getDefaultPrinter();
+          if (!printer) {
+            result = {
+              error: fallbackReason || 'No printer available',
+              canPrint: false
+            };
+          } else {
+            result = formatPrinterStatus(printer, locationName);
+            if (!wasDefault && fallbackReason) {
+              (result as any).fallbackInfo = {
+                usingFallback: true,
+                reason: fallbackReason
+              };
+            }
+          }
           break;
+        }
 
-        case 'pause_printer':
-          result = { message: printer.pause() };
+        case 'get_queue': {
+          const { printer } = await getDefaultPrinter();
+          if (!printer) {
+            result = { error: 'No printer available', jobs: [] };
+          } else {
+            const jobs = await storage.getPrintJobs(printer.id);
+            result = {
+              printerName: printer.name,
+              queueLength: jobs.length,
+              jobs: jobs.map(j => ({
+                id: j.id,
+                document: j.document_name,
+                pages: j.pages,
+                status: j.status,
+                progress: j.progress
+              }))
+            };
+          }
           break;
+        }
 
-        case 'resume_printer':
-          result = { message: printer.resume() };
+        case 'cancel_job': {
+          if (!args.jobId) {
+            result = { success: false, error: 'Missing jobId parameter' };
+          } else {
+            const success = await storage.updatePrintJob(args.jobId, { status: 'cancelled' });
+            result = { success, message: success ? 'Job cancelled' : 'Failed to cancel job' };
+          }
           break;
+        }
 
-        case 'refill_ink_cartridge':
-          result = { message: printer.refillInk(args.color) };
+        case 'get_statistics': {
+          const { printer } = await getDefaultPrinter();
+          if (!printer) {
+            result = { error: 'No printer available' };
+          } else {
+            result = {
+              printerName: printer.name,
+              totalJobs: printer.total_jobs || 0,
+              totalPages: printer.total_pages || 0
+            };
+          }
           break;
+        }
 
-        case 'load_paper':
-          result = { message: printer.loadPaper(args.count, args.paperSize) };
+        case 'refill_ink_cartridge': {
+          const { printer } = await getDefaultPrinter();
+          if (!printer) {
+            result = { success: false, error: 'No printer available' };
+          } else {
+            const color = args.color?.toLowerCase();
+            const updates: any = {};
+            if (color === 'cyan') updates.ink_cyan = 100;
+            else if (color === 'magenta') updates.ink_magenta = 100;
+            else if (color === 'yellow') updates.ink_yellow = 100;
+            else if (color === 'black') updates.ink_black = 100;
+            else if (color === 'all') {
+              updates.ink_cyan = 100;
+              updates.ink_magenta = 100;
+              updates.ink_yellow = 100;
+              updates.ink_black = 100;
+            } else {
+              result = { success: false, error: 'Invalid color. Use: cyan, magenta, yellow, black, or all' };
+              break;
+            }
+            await storage.updatePrinter(printer.id, updates);
+            result = { success: true, message: `${color} ink refilled to 100%` };
+          }
           break;
+        }
+
+        case 'load_paper': {
+          const { printer } = await getDefaultPrinter();
+          if (!printer) {
+            result = { success: false, error: 'No printer available' };
+          } else {
+            const count = Math.min(args.count || 100, printer.paper_tray_capacity);
+            await storage.updatePrinter(printer.id, { paper_count: count });
+            result = { success: true, message: `Loaded ${count} sheets of paper` };
+          }
+          break;
+        }
 
         case 'clean_print_heads':
-          result = { message: printer.cleanPrintHeads() };
-          break;
-
         case 'align_print_heads':
-          result = { message: printer.alignPrintHeads() };
-          break;
-
         case 'run_nozzle_check':
-          result = { message: printer.runNozzleCheck() };
-          break;
-
         case 'clear_paper_jam':
-          result = { message: printer.clearPaperJam() };
-          break;
-
         case 'power_cycle':
-          result = { message: printer.powerCycle() };
+        case 'reset_printer': {
+          const { printer } = await getDefaultPrinter();
+          if (!printer) {
+            result = { success: false, error: 'No printer available' };
+          } else {
+            result = { success: true, message: `${name.replace(/_/g, ' ')} completed on ${printer.name}` };
+          }
           break;
+        }
 
-        case 'reset_printer':
-          result = { message: await printer.reset() };
+        case 'pause_printer':
+        case 'resume_printer': {
+          const { printer } = await getDefaultPrinter();
+          if (!printer) {
+            result = { success: false, error: 'No printer available' };
+          } else {
+            const newStatus = name === 'pause_printer' ? 'paused' : 'ready';
+            await storage.updatePrinter(printer.id, { status: newStatus });
+            result = { success: true, message: `Printer ${name === 'pause_printer' ? 'paused' : 'resumed'}` };
+          }
           break;
+        }
 
         default:
           return res.status(404).json({
@@ -141,11 +387,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
       }
 
-      return res.status(200).json({
-        success: true,
-        tool: name,
-        result
-      });
+      return res.status(200).json({ success: true, tool: name, result });
     }
 
     // Access a resource
@@ -154,60 +396,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'Missing resource name parameter' });
       }
 
-      const printer = await getPrinter();
+      const { printer, locationName } = await getDefaultPrinter();
       let result;
 
       switch (name) {
         case 'state':
-          result = printer.getStatus();
+          result = printer ? formatPrinterStatus(printer, locationName) : { error: 'No printer' };
           break;
-
         case 'queue':
-          const queueStatus = printer.getStatus();
-          result = {
-            currentJob: queueStatus.currentJob,
-            queueLength: queueStatus.queue.length,
-            pendingJobs: queueStatus.queue.jobs
-          };
+          if (printer) {
+            const storage = getStorage();
+            const jobs = await storage.getPrintJobs(printer.id);
+            result = { printerName: printer.name, jobs };
+          } else {
+            result = { error: 'No printer', jobs: [] };
+          }
           break;
-
-        case 'logs':
-          const limit = parseInt(req.query.limit as string) || 100;
-          result = printer.getLogs(limit);
-          break;
-
         case 'statistics':
-          result = printer.getStatistics();
+          result = printer ? { printerName: printer.name, totalJobs: printer.total_jobs } : { error: 'No printer' };
           break;
-
-        case 'capabilities':
-          result = printer.getCapabilities();
-          break;
-
         default:
-          return res.status(404).json({
-            error: 'Resource not found',
-            availableResources: RESOURCES.map((r: any) => r.name)
-          });
+          return res.status(404).json({ error: 'Resource not found' });
       }
 
-      return res.status(200).json({
-        success: true,
-        resource: name,
-        data: result
-      });
+      return res.status(200).json({ success: true, resource: name, data: result });
     }
 
-    // Invalid request
-    return res.status(400).json({
-      error: 'Invalid request',
-      usage: {
-        'List tools': 'GET /api/mcp?type=tools',
-        'List resources': 'GET /api/mcp?type=resources',
-        'Execute tool': 'POST /api/mcp?type=tool&name={toolName}',
-        'Access resource': 'GET /api/mcp?type=resource&name={resourceName}'
-      }
-    });
+    return res.status(400).json({ error: 'Invalid request type' });
 
   } catch (error) {
     console.error('MCP endpoint error:', error);
@@ -218,10 +433,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-// Helper to format JSON schema to simple parameters object for display
 function formatSchemaToParameters(schema: any): Record<string, string> {
-  if (!schema || !schema.properties) return {};
-
+  if (!schema?.properties) return {};
   const params: Record<string, string> = {};
   for (const [key, value] of Object.entries(schema.properties) as [string, any][]) {
     let desc = value.type;
