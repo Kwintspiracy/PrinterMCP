@@ -154,14 +154,15 @@ export default function TemplateEditor({ apiBase = '' }: TemplateEditorProps) {
     const [previewText, setPreviewText] = useState('');
     const [loading, setLoading] = useState(false);
     const [supabaseConnected, setSupabaseConnected] = useState(false);
-    const [activeStyle, setActiveStyle] = useState<'technical' | 'friendly' | 'minimal'>(() => {
+    const [activeStyle, setActiveStyle] = useState<'technical' | 'friendly' | 'minimal' | 'custom'>(() => {
         // Initialize from localStorage
         const saved = localStorage.getItem('printer-response-style');
-        return (saved as 'technical' | 'friendly' | 'minimal') || 'technical';
+        return (saved as 'technical' | 'friendly' | 'minimal' | 'custom') || 'technical';
     });
     const [styleSaving, setStyleSaving] = useState(false);
     const [askBeforeSwitch, setAskBeforeSwitch] = useState(false);
     const [verbatim, setVerbatim] = useState(false);
+    const [customFormat, setCustomFormat] = useState('{"message": "${message}"}');
     const toast = useToast();
 
     const borderColor = useColorModeValue('borderLight.default', 'border.default');
@@ -186,6 +187,9 @@ export default function TemplateEditor({ apiBase = '' }: TemplateEditorProps) {
                     setActiveStyle(data.settings.responseStyle);
                     localStorage.setItem('printer-response-style', data.settings.responseStyle);
                 }
+                if (data.settings.customFormat) {
+                    setCustomFormat(data.settings.customFormat);
+                }
                 if (data.settings.askBeforeSwitch !== undefined) {
                     setAskBeforeSwitch(data.settings.askBeforeSwitch);
                 }
@@ -199,7 +203,7 @@ export default function TemplateEditor({ apiBase = '' }: TemplateEditorProps) {
     };
 
     // Save active style to both localStorage and server
-    const saveActiveStyle = async (style: 'technical' | 'friendly' | 'minimal') => {
+    const saveActiveStyle = async (style: 'technical' | 'friendly' | 'minimal' | 'custom') => {
         setActiveStyle(style);
         localStorage.setItem('printer-response-style', style);
         setStyleSaving(true);
@@ -218,6 +222,34 @@ export default function TemplateEditor({ apiBase = '' }: TemplateEditorProps) {
             console.warn('Could not save style to server, saved locally only');
         }
         setStyleSaving(false);
+    };
+
+    // Save custom format
+    const saveCustomFormat = async (format: string) => {
+        // Validate JSON
+        try {
+            JSON.parse(format);
+        } catch (e) {
+            toast({ title: 'Invalid JSON', description: 'Please enter valid JSON format', status: 'error', duration: 3000 });
+            return;
+        }
+
+        setCustomFormat(format);
+
+        try {
+            const res = await fetch(`${apiBase}/api/settings?type=user`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ customFormat: format })
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast({ title: 'Custom format saved', status: 'success', duration: 2000 });
+            }
+        } catch (error) {
+            console.warn('Could not save custom format to server');
+            toast({ title: 'Could not save to server', status: 'warning', duration: 2000 });
+        }
     };
 
     // Save askBeforeSwitch preference
@@ -392,6 +424,7 @@ export default function TemplateEditor({ apiBase = '' }: TemplateEditorProps) {
                         <option value="technical">⚙️ Technical</option>
                         <option value="friendly">😊 Friendly</option>
                         <option value="minimal">📝 Minimal</option>
+                        <option value="custom">🔧 Custom Format</option>
                     </Select>
                 </HStack>
                 <HStack justify="space-between" align="center" mt={3} pt={3} borderTop="1px solid" borderColor={borderColor}>
@@ -473,49 +506,120 @@ Params: { "responseStyle": "${activeStyle}"${verbatim ? ', "verbatim": true' : '
                             </Select>
                         </Box>
 
-                        {/* Template Editor - Single Style */}
-                        <Box>
-                            <Text fontSize="xs" fontWeight="semibold" color={mutedText} textTransform="uppercase" mb={2}>
-                                Editing: {activeStyle.charAt(0).toUpperCase() + activeStyle.slice(1)} Template
-                            </Text>
-                            <Textarea
-                                size="sm"
-                                rows={4}
-                                value={editContent[activeStyle] || ''}
-                                onChange={(e) => setEditContent({ ...editContent, [activeStyle]: e.target.value })}
-                                placeholder={`${activeStyle} template...`}
-                                fontFamily="mono"
-                                fontSize="xs"
-                            />
-                        </Box>
+                        {/* Conditional Editor - Custom Format vs Templates */}
+                        {activeStyle === 'custom' ? (
+                            <>
+                                {/* Custom Format JSON Editor */}
+                                <Box>
+                                    <HStack mb={2} justify="space-between">
+                                        <Text fontSize="xs" fontWeight="semibold" color={mutedText} textTransform="uppercase">
+                                            Custom JSON Format
+                                        </Text>
+                                        <Select size="xs" w="auto" onChange={(e) => setCustomFormat(e.target.value)}>
+                                            <option value="">Load Preset...</option>
+                                            <option value='{"message": "${message}"}'>Simple Message</option>
+                                            <option value='{"status": "${status}", "message": "${message}"}'>Status + Message</option>
+                                            <option value='{"printer": "${name}", "status": "${status}", "message": "${message}", "canPrint": ${canPrint}}'>Full Details</option>
+                                        </Select>
+                                    </HStack>
+                                    <Textarea
+                                        size="sm"
+                                        rows={6}
+                                        value={customFormat}
+                                        onChange={(e) => setCustomFormat(e.target.value)}
+                                        placeholder='{"message": "${message}"}'
+                                        fontFamily="mono"
+                                        fontSize="xs"
+                                    />
+                                    <HStack mt={2}>
+                                        <Button size="xs" onClick={() => saveCustomFormat(customFormat)} colorScheme="blue">
+                                            Save Custom Format
+                                        </Button>
+                                    </HStack>
+                                </Box>
 
-                        <Text fontSize="xs" color={mutedText}>
-                            Use <Code fontSize="xs" bg={codeBg}>${'{'}variable{'}'}</Code> for dynamic values
-                        </Text>
-
-                        {/* Preview */}
-                        <Box>
-                            <HStack mb={2}>
-                                <Icon as={FiEye} boxSize={3} color={mutedText} />
-                                <Text fontSize="xs" fontWeight="semibold" color={mutedText} textTransform="uppercase">
-                                    Preview ({activeStyle})
+                                <Text fontSize="xs" color={mutedText}>
+                                    Available variables: <Code fontSize="xs" bg={codeBg}>${'{'}message{'}'}</Code>, <Code fontSize="xs" bg={codeBg}>${'{'}status{'}'}</Code>, <Code fontSize="xs" bg={codeBg}>${'{'}name{'}'}</Code>, <Code fontSize="xs" bg={codeBg}>${'{'}inkLevels{'}'}</Code>, <Code fontSize="xs" bg={codeBg}>${'{'}paperCount{'}'}</Code>, <Code fontSize="xs" bg={codeBg}>${'{'}canPrint{'}'}</Code>
                                 </Text>
-                            </HStack>
-                            <Box p={3} bg={codeBg} borderRadius="md" fontSize="sm">
-                                {editContent[activeStyle] ? (
-                                    (() => {
-                                        const variables = SAMPLE_VARIABLES[selectedKey] || {};
-                                        let preview = editContent[activeStyle] || '';
-                                        Object.entries(variables).forEach(([key, value]) => {
-                                            preview = preview.replace(new RegExp(`\\$\\{${key}\\}`, 'g'), String(value));
-                                        });
-                                        return preview;
-                                    })()
-                                ) : (
-                                    <Text color={mutedText} fontStyle="italic">No preview available</Text>
-                                )}
-                            </Box>
-                        </Box>
+
+                                {/* Custom Format Preview */}
+                                <Box>
+                                    <HStack mb={2}>
+                                        <Icon as={FiEye} boxSize={3} color={mutedText} />
+                                        <Text fontSize="xs" fontWeight="semibold" color={mutedText} textTransform="uppercase">
+                                            Custom Format Preview
+                                        </Text>
+                                    </HStack>
+                                    <Box p={3} bg={codeBg} borderRadius="md" fontSize="sm">
+                                        {(() => {
+                                            try {
+                                                const variables = SAMPLE_VARIABLES[selectedKey] || {};
+                                                const sampleMessage = "PRINTER_STATUS: READY. All systems operational. INK_WARNING: yellow cartridge at 9%. Replacement recommended.";
+                                                let preview = customFormat;
+                                                // Replace variables
+                                                preview = preview.replace(/\$\{message\}/g, sampleMessage);
+                                                preview = preview.replace(/\$\{status\}/g, 'ready');
+                                                preview = preview.replace(/\$\{name\}/g, 'HP ENVY 6055e');
+                                                preview = preview.replace(/\$\{inkLevels\}/g, '{"cyan":100,"magenta":100,"yellow":9,"black":100}');
+                                                preview = preview.replace(/\$\{paperCount\}/g, '100');
+                                                preview = preview.replace(/\$\{canPrint\}/g, 'true');
+                                                // Format JSON for display
+                                                const parsed = JSON.parse(preview);
+                                                return <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{JSON.stringify(parsed, null, 2)}</pre>;
+                                            } catch (e) {
+                                                return <Text color="red.400">Invalid JSON format</Text>;
+                                            }
+                                        })()}
+                                    </Box>
+                                </Box>
+                            </>
+                        ) : (
+                            <>
+                                {/* Template Editor - Single Style */}
+                                <Box>
+                                    <Text fontSize="xs" fontWeight="semibold" color={mutedText} textTransform="uppercase" mb={2}>
+                                        Editing: {activeStyle.charAt(0).toUpperCase() + activeStyle.slice(1)} Template
+                                    </Text>
+                                    <Textarea
+                                        size="sm"
+                                        rows={4}
+                                        value={activeStyle !== 'custom' ? (editContent[activeStyle] || '') : ''}
+                                        onChange={(e) => setEditContent({ ...editContent, [activeStyle]: e.target.value })}
+                                        placeholder={`${activeStyle} template...`}
+                                        fontFamily="mono"
+                                        fontSize="xs"
+                                    />
+                                </Box>
+
+                                <Text fontSize="xs" color={mutedText}>
+                                    Use <Code fontSize="xs" bg={codeBg}>${'{'}variable{'}'}</Code> for dynamic values
+                                </Text>
+
+                                {/* Preview */}
+                                <Box>
+                                    <HStack mb={2}>
+                                        <Icon as={FiEye} boxSize={3} color={mutedText} />
+                                        <Text fontSize="xs" fontWeight="semibold" color={mutedText} textTransform="uppercase">
+                                            Preview ({activeStyle})
+                                        </Text>
+                                    </HStack>
+                                    <Box p={3} bg={codeBg} borderRadius="md" fontSize="sm">
+                                        {activeStyle !== 'custom' && editContent[activeStyle] ? (
+                                            (() => {
+                                                const variables = SAMPLE_VARIABLES[selectedKey] || {};
+                                                let preview = editContent[activeStyle] || '';
+                                                Object.entries(variables).forEach(([key, value]) => {
+                                                    preview = preview.replace(new RegExp(`\\$\\{${key}\\}`, 'g'), String(value));
+                                                });
+                                                return preview;
+                                            })()
+                                        ) : (
+                                            <Text color={mutedText} fontStyle="italic">No preview available</Text>
+                                        )}
+                                    </Box>
+                                </Box>
+                            </>
+                        )}
 
                         <Divider />
 
